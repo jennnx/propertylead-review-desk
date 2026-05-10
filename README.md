@@ -1,100 +1,85 @@
 # Triage OS
 
-Infrastructure foundation for an AI lead-analysis service. Next.js web app + BullMQ worker, backed by Postgres (pgvector) and Redis, with a production-style Docker Compose stack fronted by nginx.
+Next.js web app + BullMQ worker. Postgres (pgvector) + Redis. Docker Compose for prod, behind nginx.
 
-## Quick start (local dev)
+## Local dev
 
 ```bash
 cp .env.example .env
 docker compose -f docker-compose.deps.yml up -d postgres redis
 pnpm install
 pnpm db:migrate
-pnpm dev          # Next.js with HMR on http://localhost:3000
-pnpm worker:dev   # BullMQ worker — separate terminal
+pnpm dev          # web on :3000
+pnpm worker:dev   # separate terminal
 ```
 
-If you already run Postgres or Redis on your host, point `DATABASE_URL` / `REDIS_URL` in `.env` at them and omit the matching service from the `docker compose -f docker-compose.deps.yml up -d` line (e.g. `up -d postgres` only).
+Using a host Postgres or Redis? Edit `DATABASE_URL` / `REDIS_URL` and drop the matching service from `up -d` (e.g. `up -d postgres` only).
 
 ## Deploy (VPS)
 
 ```bash
 git clone <repo> && cd propertylead-review-desk
 cp .env.example .env
-# Edit .env: set POSTGRES_PASSWORD to a strong random value
+# Set POSTGRES_PASSWORD to a strong random value
 docker compose up -d --build
 ```
 
-Then open firewall port 80 (and 443 if you add TLS) and point DNS at the VPS. The compose stack runs Postgres, Redis, a one-shot migration role, web, worker, and nginx; nginx is the only service publicly bound.
-
-For TLS, network binding rationale, and the broader production story, see [ADR 0005](docs/adr/0005-prod-network-binding.md).
+nginx is the only service publicly bound. Open :80 (and :443 if you add TLS), point DNS at the VPS. TLS + binding rationale: [ADR 0005](docs/adr/0005-prod-network-binding.md).
 
 ## Gotchas
 
-- **`POSTGRES_PASSWORD` is locked in at first `docker compose up`.** Postgres initialises the data volume with whatever value is set at first boot; changing it later requires `docker compose down -v`, which destroys the volume. Set it before the first up. See [ADR 0005](docs/adr/0005-prod-network-binding.md).
-- **The worker is a separate process** — `pnpm dev` does *not* start it. Run `pnpm worker:dev` in a second terminal. See [ADR 0002](docs/adr/0002-worker-as-separate-process.md).
-- **Import services from the public root, not `internal/`.** `pnpm lint` will fail otherwise. See [ADR 0004](docs/adr/0004-service-modules-with-internal.md).
-- **`prisma generate` runs via `postinstall`.** If you ever skip install hooks, run `pnpm db:generate` before build/typecheck. See [ADR 0001](docs/adr/0001-prisma-7-adapter-pattern.md).
-- **`waitUntilFinished` is restricted to `scripts/queue-verify.ts`.** Do not call it from a route handler or anywhere else in the request path. See [ADR 0006](docs/adr/0006-permanent-diagnostic-queue.md).
+- `POSTGRES_PASSWORD` is baked into the postgres volume on first `up`. Changing it later: `docker compose down -v` (destroys data). [ADR 0005](docs/adr/0005-prod-network-binding.md).
+- Worker is a separate process. `pnpm dev` does not start it. [ADR 0002](docs/adr/0002-worker-as-separate-process.md).
+- Import services from the package root, not `internal/`. `pnpm lint` enforces this. [ADR 0004](docs/adr/0004-service-modules-with-internal.md).
+- `prisma generate` runs as `postinstall`. If install hooks are skipped, run `pnpm db:generate` before build/typecheck. [ADR 0001](docs/adr/0001-prisma-7-adapter-pattern.md).
+- `waitUntilFinished` lives in `scripts/queue-verify.ts` only — never in request paths. [ADR 0006](docs/adr/0006-permanent-diagnostic-queue.md).
 
 ## FAQ
 
-Common things you'll hit on day one. If your symptom matches one of these, try the fix before digging deeper.
-
-**"I started `pnpm dev` and the app is throwing `ECONNREFUSED` on `127.0.0.1:5432` (or `:6379`)."**
-Postgres (or Redis) isn't running. Bring up the deps stack first:
+**`ECONNREFUSED 127.0.0.1:5432` (or `:6379`)** — deps stack isn't up.
 ```bash
 docker compose -f docker-compose.deps.yml up -d postgres redis
 ```
-Or, if you have your own host services, point `DATABASE_URL` / `REDIS_URL` in `.env` at them.
 
-**"The web app works, but jobs I enqueue never seem to run."**
-The worker is a separate process — `pnpm dev` does not start it. Open a second terminal and run:
+**Web works, jobs never run** — worker isn't started.
 ```bash
 pnpm worker:dev
 ```
-You should see `worker: started (pid=…, queues=1)` and `worker[infra.smoke]: ready`.
 
-**"I'm getting `relation "..." does not exist` or `type "vector" does not exist` from Prisma."**
-Migrations haven't been applied to the database. Run:
+**Prisma `relation "..." does not exist` or `type "vector" does not exist`** — migrations not applied.
 ```bash
 pnpm db:migrate
 ```
-This applies pending migrations including the one that enables pgvector.
 
-**"TypeScript is complaining that Prisma types are missing, or `@prisma/client` can't be found."**
-The Prisma client wasn't generated for this checkout. Run:
+**Prisma types missing / `@prisma/client` not found** — client not generated.
 ```bash
-pnpm db:generate
+pnpm db:generate   # or rerun `pnpm install`
 ```
-This normally runs automatically via `postinstall`, so `pnpm install` also fixes it.
 
-**"`docker compose ... up` complains that port 5432 (or 6379, or 3000) is already in use."**
-Something else on your host is on that port — usually your own Postgres, Redis, or another dev server. Two options:
-- Stop the conflicting service (e.g. `brew services stop postgresql@14`).
-- Keep using it: edit `.env` to point `DATABASE_URL` / `REDIS_URL` at the host service, and skip the matching service when bringing up the deps stack (e.g. `up -d postgres` only).
+**Port 5432 / 6379 / 3000 already in use** — host already runs that service. Either stop it (`brew services stop postgresql@14`) or keep it: point `.env` at it and skip the matching compose service.
 
 ## Scripts
 
-| Script              | What                                                                  |
-| ------------------- | --------------------------------------------------------------------- |
-| `pnpm dev`          | Next.js dev server (HMR / Turbopack)                                  |
-| `pnpm worker:dev`   | BullMQ worker in watch mode (tsx)                                     |
-| `pnpm build`        | Production build (`prisma generate` + `next build`)                   |
-| `pnpm worker:build` | Compile worker to `dist/` via `tsc`                                   |
-| `pnpm start`        | Run the Next.js production server                                     |
-| `pnpm worker:start` | Run the compiled worker from `dist/`                                  |
-| `pnpm db:migrate`   | `prisma migrate deploy` — apply pending migrations                    |
-| `pnpm db:migrate:dev` | Create + apply a new migration from schema changes (local only)     |
-| `pnpm db:generate`  | Regenerate Prisma client (also runs as `postinstall`)                 |
-| `pnpm db:status`    | Show pending vs. applied migrations                                   |
-| `pnpm db:check`     | Read-only probe: connectivity + pgvector                              |
-| `pnpm health:check` | Probe `GET /api/health` (override base via `HEALTH_URL`)              |
-| `pnpm queue:verify` | End-to-end queue + worker probe via `infra.smoke` job                 |
-| `pnpm lint`         | ESLint                                                                |
-| `pnpm exec tsc --noEmit` | Type check                                                       |
+| Script | What |
+| --- | --- |
+| `pnpm dev` | Next.js dev server (HMR / Turbopack) |
+| `pnpm worker:dev` | Worker in watch mode (tsx) |
+| `pnpm build` | `prisma generate` + `next build` |
+| `pnpm worker:build` | Compile worker to `dist/` |
+| `pnpm start` | Next.js production server |
+| `pnpm worker:start` | Compiled worker from `dist/` |
+| `pnpm db:migrate` | `prisma migrate deploy` |
+| `pnpm db:migrate:dev` | New migration from schema changes (local only) |
+| `pnpm db:generate` | Regenerate Prisma client (also runs as `postinstall`) |
+| `pnpm db:status` | Pending vs. applied migrations |
+| `pnpm db:check` | Connectivity + pgvector probe |
+| `pnpm health:check` | `GET /api/health` probe (`HEALTH_URL` overrides base) |
+| `pnpm queue:verify` | End-to-end queue + worker probe |
+| `pnpm lint` | ESLint |
+| `pnpm exec tsc --noEmit` | Typecheck |
 
 ## Reference
 
-- [`docs/adr/`](docs/adr/) — Architecture Decision Records. Read when you find a non-obvious choice and want to know why.
-- [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) — agent-facing instructions for working in this repo.
-- [`docs/agents/`](docs/agents/) — agent skill mappings (issue tracker, triage labels, domain docs).
+- [`docs/adr/`](docs/adr/) — ADRs.
+- [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) — agent instructions.
+- [`docs/agents/`](docs/agents/) — agent skill mappings.
