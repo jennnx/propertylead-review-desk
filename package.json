@@ -13,6 +13,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:status": "prisma migrate status",
     "db:check": "tsx scripts/db-check.ts",
+    "health:check": "tsx scripts/health-check.ts",
     "sandcastle": "tsx .sandcastle/main.mts"
   },
   "dependencies": {

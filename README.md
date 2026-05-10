@@ -107,6 +107,41 @@ pnpm db:check
 
 The script prints one line per check (`database` and `pgvector`) and exits non-zero on any failure.
 
+## Web health endpoint
+
+`GET /api/health` is a read-only endpoint exposed by the Next.js app. It verifies the web process and its infrastructure dependencies without enqueuing jobs or mutating database state. Both local debugging and the production container healthcheck use it.
+
+The response is JSON of the shape:
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "server":   { "ok": true },
+    "database": { "ok": true },
+    "pgvector": { "ok": true },
+    "redis":    { "ok": true },
+    "queue":    { "ok": true }
+  }
+}
+```
+
+If any dependency check fails, the corresponding entry carries an `error` string, `status` becomes `"fail"`, and the endpoint returns HTTP **503** instead of **200**.
+
+Call it locally:
+
+```bash
+# Start the dev server first (separate terminal).
+pnpm dev
+
+# Hit the endpoint directly.
+curl -i http://localhost:3000/api/health
+
+# Or run the bundled check script — same fetch, with a non-zero exit code
+# on any failure (override the base URL with HEALTH_URL=... if needed).
+pnpm health:check
+```
+
 ## Service modules
 
 Infrastructure code lives in deep service modules under `services/<name>/`. Each module exposes a narrow public API from its `index.ts`; the implementation lives in `services/<name>/internal/`. Callers — Next route handlers, the BullMQ worker, scripts, and future tests — should import from the module root and treat the internals as private:
