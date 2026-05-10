@@ -1,0 +1,33 @@
+# Files excluded from the production app image build context.
+# Keep this in sync with what the multi-stage Dockerfile actually copies.
+
+# VCS / editor
+.git
+.gitignore
+.gitattributes
+.editorconfig
+.vscode
+.idea
+
+# Dependency / build artifacts (regenerated inside the image)
+node_modules
+.next
+dist
+out
+build
+tsconfig.tsbuildinfo
+.pnpm-store
+
+# Local environment / secrets — never bake into the image
+.env
+.env.*
+!.env.example
+
+# Local-only infra / docs / agent scratch
+docker-compose.deps.yml
+.sandcastle
+docs
+
+# Logs / misc
+*.log
+.DS_Store

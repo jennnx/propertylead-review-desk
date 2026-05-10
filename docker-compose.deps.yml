@@ -1,0 +1,48 @@
+# Local dependency stack for Triage OS development.
+#
+# Provides Postgres (with pgvector) and Redis only. The Next.js web app and
+# the BullMQ worker are NOT in this file — run those with `pnpm dev` and the
+# worker dev command. See README.md for usage.
+#
+# Image tags are pinned deliberately:
+#   * pgvector/pgvector:0.8.2-pg17-trixie  — Postgres 17 with pgvector 0.8.2
+#     baked in (no dynamic CREATE EXTENSION install at container start).
+#   * redis:7.4-alpine3.21                 — Redis 7.4 LTS-style on Alpine 3.21.
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg17-trixie
+    container_name: triage-os-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: triage_os
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d triage_os"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine3.21
+    container_name: triage-os-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
