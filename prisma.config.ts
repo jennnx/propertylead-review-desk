@@ -1,6 +1,6 @@
 // Prisma 7 configuration. Centralises the connection URL for migration
 // commands; runtime PrismaClient gets its connection through a driver
-// adapter (see scripts/db-check.ts).
+// adapter (see services/database/internal/client.ts).
 //
 // `prisma migrate ...` reads `datasource.url` from this file rather than
 // from `prisma/schema.prisma`. `prisma generate` does not need the URL,
