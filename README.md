@@ -74,6 +74,39 @@ console.log(env.DATABASE_URL);
 
 The schema validates lazily on first property access and throws a useful error listing every missing or malformed variable. Linting (`pnpm lint`) and typechecking do not trigger validation, so static checks succeed even without a populated `.env`.
 
+## Database (Prisma + pgvector)
+
+The project uses [Prisma](https://www.prisma.io) (v7) for schema and migrations against PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension. The schema (`prisma/schema.prisma`) intentionally defines no product/domain models yet — tracer feature slices add real models when they need them.
+
+In Prisma 7 the connection URL no longer lives inside `schema.prisma`. The runtime client connects through the `@prisma/adapter-pg` driver adapter (reading `DATABASE_URL` from the env module), and migration commands read the URL from `prisma.config.ts`.
+
+Scripts:
+
+| Script               | What it does                                                                  |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `pnpm db:generate`   | Regenerates the Prisma client. Runs automatically as `postinstall`.           |
+| `pnpm db:migrate`    | Applies pending migrations (`prisma migrate deploy`). Use in production/CI.   |
+| `pnpm db:migrate:dev`| Creates and applies new migrations from schema changes during development.    |
+| `pnpm db:status`     | Shows pending vs. applied migrations (`prisma migrate status`).               |
+| `pnpm db:check`      | Read-only check: connects to `DATABASE_URL` and verifies pgvector is enabled. |
+
+### Ordering
+
+- **Generate before build/typecheck** — `pnpm install` runs `prisma generate` via `postinstall` so generated types are available before `pnpm build`, `pnpm exec tsc --noEmit`, or `pnpm lint`. `pnpm build` also re-runs `prisma generate` defensively before `next build`. If you skipped install hooks, run `pnpm db:generate` manually.
+- **Migrate before runtime start** — `pnpm db:migrate` (or `db:migrate:dev` locally) must run before `pnpm dev`/`pnpm start` and before the BullMQ worker starts. The production Compose stack will run a one-shot migration role for this; locally, run it once after starting the dependency stack and any time you pull new migrations.
+
+### Initial pgvector setup
+
+The baseline migration (`prisma/migrations/20260510000000_init/migration.sql`) issues `CREATE EXTENSION IF NOT EXISTS vector;`. Both the local dependency Compose stack and the production stack use the `pgvector/pgvector` image, so this only registers the extension in the configured database — no extension binaries are downloaded at migrate time.
+
+Verify manually with:
+
+```bash
+pnpm db:check
+```
+
+The script prints one line per check (`database` and `pgvector`) and exits non-zero on any failure.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

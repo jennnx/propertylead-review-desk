@@ -1,0 +1,20 @@
+// Prisma schema for Triage OS infrastructure baseline.
+//
+// This file deliberately defines no product/domain models. It exists so
+// Prisma client generation, migrations, and the pgvector extension are
+// wired up. Tracer feature slices add real models when they need them.
+//
+// In Prisma 7 the `url` no longer lives in the datasource block — the
+// connection URL is read from the process environment by `prisma.config.ts`
+// for migration commands, and is supplied to the runtime PrismaClient via a
+// driver adapter (@prisma/adapter-pg).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
