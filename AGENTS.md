@@ -4,6 +4,10 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# Verification
+
+Package manager is **pnpm**. Before committing, run `pnpm lint` and `pnpm exec tsc --noEmit`. No test runner is configured — do not invent one.
+
 # Components
 
 This project uses shadcn/ui for components. The `components/ui` folder contains basic UI building blocks, and agents may add more shadcn/ui components there as needed. Refer to the shadcn skill before creating, modifying, or adding components.
@@ -12,7 +16,7 @@ This project uses shadcn/ui for components. The `components/ui` folder contains 
 
 ### Issue tracker
 
-Issues and PRDs are tracked in GitHub Issues for `jennnx/triage-os`. See `docs/agents/issue-tracker.md`.
+Issues and PRDs are tracked in GitHub Issues for `jennnx/propertylead-review-desk`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

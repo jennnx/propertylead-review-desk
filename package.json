@@ -1,12 +1,13 @@
 {
-  "name": "triage-os",
+  "name": "propertylead-review-desk",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sandcastle": "tsx .sandcastle/main.mts"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.1.2",
@@ -22,6 +23,7 @@
     "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
+    "@ai-hero/sandcastle": "^0.5.10",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
