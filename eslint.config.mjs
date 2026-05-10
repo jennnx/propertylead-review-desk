@@ -43,6 +43,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".sandcastle/worktrees/**",
+    // Worker build output (see worker/tsconfig.json -> outDir).
+    "dist/**",
   ]),
 ]);
 

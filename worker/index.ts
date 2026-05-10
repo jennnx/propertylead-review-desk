@@ -16,22 +16,20 @@ import { disconnectProbeRedis, processInfraSmoke } from "./jobs/infra-smoke";
 type AnyWorker = Worker<unknown, unknown, string>;
 
 function registerWorkers(): AnyWorker[] {
-  const infraSmoke = createWorker(QUEUE_NAMES.INFRA_SMOKE, processInfraSmoke);
+  const infraSmokeName = QUEUE_NAMES.INFRA_SMOKE;
+  const infraSmoke = createWorker(infraSmokeName, processInfraSmoke);
 
   infraSmoke.on("ready", () => {
-    console.log(`worker[${QUEUE_NAMES.INFRA_SMOKE}]: ready`);
+    console.log(`worker[${infraSmokeName}]: ready`);
   });
   infraSmoke.on("completed", (job) => {
-    console.log(`worker[${QUEUE_NAMES.INFRA_SMOKE}]: job ${job.id} completed`);
+    console.log(`worker[${infraSmokeName}]: job ${job.id} completed`);
   });
   infraSmoke.on("failed", (job, err) => {
-    console.error(
-      `worker[${QUEUE_NAMES.INFRA_SMOKE}]: job ${job?.id ?? "?"} failed:`,
-      err,
-    );
+    console.error(`worker[${infraSmokeName}]: job ${job?.id ?? "?"} failed:`, err);
   });
   infraSmoke.on("error", (err) => {
-    console.error(`worker[${QUEUE_NAMES.INFRA_SMOKE}]: error:`, err);
+    console.error(`worker[${infraSmokeName}]: error:`, err);
   });
 
   return [infraSmoke as AnyWorker];
