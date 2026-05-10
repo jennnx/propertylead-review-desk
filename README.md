@@ -33,7 +33,36 @@ Required infrastructure variables at this stage:
 
 Additional integration secrets (Claude, HubSpot, PromptFoo, etc.) will be added by their respective tracer slices and are intentionally not required yet.
 
-Postgres and Redis can either be **user-managed** (your own local services or hosted instances) or, in a later tracer slice, provided by an **optional local dependency Compose stack**. See `.env.example` for documented placeholders.
+Postgres and Redis can either be **user-managed** (your own local services or hosted instances) or provided by the **optional local dependency Compose stack** described below. Either way, `DATABASE_URL` and `REDIS_URL` in your `.env` must point at the chosen instances. See `.env.example` for documented placeholders.
+
+## Local dependency stack (optional)
+
+`docker-compose.deps.yml` provides Postgres (with pgvector) and Redis for developers who do not want to install or manage those services manually. It does **not** run the Next.js web app or the BullMQ worker — keep running those with `pnpm dev` so HMR/Turbopack stays available.
+
+Image tags are pinned deliberately:
+
+| Service  | Image                                  | Notes                                                                |
+| -------- | -------------------------------------- | -------------------------------------------------------------------- |
+| Postgres | `pgvector/pgvector:0.8.2-pg17-trixie`  | Postgres 17 with pgvector 0.8.2 baked into the image.                |
+| Redis    | `redis:7.4-alpine3.21`                 | Redis 7.4 on Alpine 3.21.                                            |
+
+Commands:
+
+```bash
+# Start Postgres + Redis in the background.
+docker compose -f docker-compose.deps.yml up -d
+
+# Tail logs.
+docker compose -f docker-compose.deps.yml logs -f
+
+# Stop the stack but keep the data volumes.
+docker compose -f docker-compose.deps.yml down
+
+# Stop the stack and discard the Postgres/Redis volumes (destructive).
+docker compose -f docker-compose.deps.yml down -v
+```
+
+The default credentials match `.env.example` (`postgres:postgres@localhost:5432/triage_os` and `redis://localhost:6379`), so a fresh `cp .env.example .env` already points the app at the Compose stack. If you prefer your own Postgres/Redis instances, edit `.env` instead and skip the Compose commands.
 
 ### Usage
 
