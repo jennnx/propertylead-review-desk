@@ -200,7 +200,7 @@ The worker logs `worker: started (pid=…, queues=N)` on boot and `worker[infra.
 
 ### Production
 
-The production Compose stack (added in a later tracer slice) builds a single application image and runs `pnpm worker:start` as the worker role. That command requires `dist/worker/index.js` to exist, so the image build runs `pnpm worker:build` after `pnpm install`.
+The production Compose stack (`docker-compose.yml`) builds a single application image and runs `pnpm worker:start` as the worker role. That command requires `dist/worker/index.js` to exist, so the image build runs `pnpm worker:build` after `pnpm install`. See [Production Compose stack](#production-compose-stack) below for the full ordering across web, worker, and migration roles.
 
 ### The `infra.smoke` diagnostic job
 
@@ -237,6 +237,61 @@ await q.add("ping", {});
 ```
 
 The worker terminal should print `worker[infra.smoke]: job <id> completed`.
+
+## Production Compose stack
+
+`docker-compose.yml` (root of the repo, distinct from the local-only `docker-compose.deps.yml`) describes the production runtime. It builds **one** application image from `Dockerfile` and runs three roles from it:
+
+| Role      | Command              | Restart policy   |
+| --------- | -------------------- | ---------------- |
+| `migrate` | `pnpm db:migrate`    | `no` (one-shot)  |
+| `web`     | `pnpm start`         | `unless-stopped` |
+| `worker`  | `pnpm worker:start`  | `unless-stopped` |
+
+Postgres and Redis run as separate services using the same pinned tags as the dev stack:
+
+| Service    | Image                                  |
+| ---------- | -------------------------------------- |
+| `postgres` | `pgvector/pgvector:0.8.2-pg17-trixie`  |
+| `redis`    | `redis:7.4-alpine3.21`                 |
+
+### Startup ordering
+
+Dependency readiness is enforced by Compose `depends_on` conditions, not by container start order:
+
+1. `postgres` and `redis` become **healthy** (via their native `pg_isready` / `redis-cli ping` healthchecks).
+2. `migrate` then starts, runs `prisma migrate deploy`, and exits.
+3. `web` and `worker` only start once `migrate` has completed **successfully** (`service_completed_successfully`). A failed migration aborts the rollout instead of leaving the database half-migrated.
+4. The `web` container's own healthcheck hits the read-only `GET /api/health` endpoint so the orchestrator marks it unhealthy when any infrastructure dependency drops.
+
+### Build and run
+
+```bash
+# Build the shared application image.
+docker compose build
+
+# Run the migration gate, then start web + worker.
+docker compose up -d
+
+# Tail logs across the whole stack.
+docker compose logs -f
+
+# Or follow a single role.
+docker compose logs -f web
+docker compose logs -f worker
+
+# Stop the stack but keep Postgres/Redis volumes.
+docker compose down
+
+# Stop the stack and discard the volumes (destructive).
+docker compose down -v
+```
+
+`docker compose up` will run `migrate` to completion before `web`/`worker` boot. To re-run only the migration step against a running stack, use `docker compose run --rm migrate`.
+
+### Environment variables
+
+The compose file sets `DATABASE_URL` and `REDIS_URL` to the in-network service hostnames (`postgres`, `redis`). Any other infrastructure variables required by future tracer slices should be added to the `x-app` anchor at the top of `docker-compose.yml` so all three roles inherit them.
 
 ## Learn More
 

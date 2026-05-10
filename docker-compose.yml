@@ -1,0 +1,108 @@
+# Production-style Compose stack for Triage OS.
+#
+# One shared application image (built from ./Dockerfile) runs three roles —
+# `web`, `worker`, and a one-shot `migrate` gate. Postgres and Redis use the
+# same pinned images as docker-compose.deps.yml so the local and production
+# data planes are identical.
+#
+# Startup ordering is enforced by Compose dependency conditions, not by
+# implicit container start order:
+#
+#   postgres  --healthcheck pg_isready-->.
+#   redis     --healthcheck redis ping->|
+#                                       v
+#                                    migrate  (one-shot, must exit 0)
+#                                       |
+#                          .------------+------------.
+#                          v                         v
+#                         web                      worker
+#                  (next start)              (node dist/worker/index.js)
+#
+# Image tags pinned deliberately (matches docker-compose.deps.yml):
+#   * pgvector/pgvector:0.8.2-pg17-trixie  — Postgres 17 with pgvector 0.8.2
+#   * redis:7.4-alpine3.21                 — Redis 7.4 LTS on Alpine 3.21
+
+x-app: &app
+  image: triage-os/app:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/triage_os
+    REDIS_URL: redis://redis:6379
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg17-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: triage_os
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d triage_os"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine3.21
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot migration gate. Runs `prisma migrate deploy` after Postgres and
+  # Redis report healthy, then exits. web/worker depend on this service
+  # completing successfully, so a migration failure stops the rollout.
+  migrate:
+    <<: *app
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["pnpm", "db:migrate"]
+
+  web:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    command: ["pnpm", "start"]
+    # Container-level healthcheck hits the read-only /api/health endpoint.
+    # Node 20+ has a global `fetch`, so no extra HTTP client is required.
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  worker:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["pnpm", "worker:start"]
+
+volumes:
+  postgres-data:
+  redis-data:
