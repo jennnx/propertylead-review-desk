@@ -1,16 +1,22 @@
 # TASK
 
-Review the code changes on branch `{{BRANCH}}` and improve code clarity, consistency, and maintainability while preserving exact functionality.
+Review the **most recent commits** on branch `{{BRANCH}}` (the commits the implementer just added in this iteration) and improve code clarity, consistency, and maintainability while preserving exact functionality.
+
+Earlier commits on this branch have already been reviewed in prior iterations — do not re-review them.
 
 # CONTEXT
 
-## Branch diff
+## Diff of new commits
 
-!`git diff {{SOURCE_BRANCH}}...{{BRANCH}}`
+!`git diff {{SINCE}}..HEAD`
 
-## Commits on this branch
+## New commits being reviewed
 
-!`git log {{SOURCE_BRANCH}}..{{BRANCH}} --oneline`
+!`git log {{SINCE}}..HEAD --oneline`
+
+## Progress log from earlier agents this run
+
+!`cat .sandcastle/progress.txt 2>/dev/null || echo "(empty — you are the first agent in this run)"`
 
 # REVIEW PROCESS
 
@@ -51,5 +57,24 @@ If you find improvements to make:
 3. Commit describing the refinements (use a clear, non-`RALPH:` prefix so the commit is distinguishable from the implementer's work)
 
 If the code is already clean and well-structured, do nothing.
+
+# Before you sign off
+
+Append a brief entry to `.sandcastle/progress.txt` so the next agent in this run has context. Format:
+
+```
+[reviewer iter {{ITERATION}}] <one-line summary of refinements (or "no changes needed")>
+  - <optional pointer the next agent might want to know>
+```
+
+Rules for the entry:
+- 1–3 lines total. Brief and factual.
+- Mention any structural changes you made that the next implementer should be aware of (renamed exports, extracted helpers, etc.).
+- Do **not** instruct future agents how to do their job.
+- Do **not** add filler or thanks.
+
+Use `>>` to append, never `>` (don't overwrite earlier entries).
+
+# Done
 
 Once complete, output <promise>COMPLETE</promise>.

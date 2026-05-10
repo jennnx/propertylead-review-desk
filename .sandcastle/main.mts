@@ -1,112 +1,139 @@
-// Sequential Reviewer — implement-then-review loop
+// Sequential Reviewer — implement-then-review loop, stacked on one branch
 //
-// This template drives a two-phase workflow per issue:
-//   Phase 1 (Implement): A sonnet agent picks an open issue, works on it
-//                        on a dedicated branch, commits the changes, and signals
-//                        completion.
-//   Phase 2 (Review):    A second sonnet agent reviews the branch diff and either
-//                        approves it or makes corrections directly on the branch.
+// One worktree/branch is created at the start. Each iteration the implementer
+// picks an open issue, commits on the shared branch, closes the issue, then
+// the reviewer refines in-place on the same branch. Iteration N+1 starts from
+// iteration N's HEAD, so dependent issues can build on prior work.
 //
-// Both phases share a single sandbox created via createSandbox(), so the
-// implementer and reviewer work on the same explicit branch.
-//
-// The outer loop repeats up to MAX_ITERATIONS times, processing one issue per
-// iteration. This is a middle-complexity option between the simple-loop (no review
-// gate) and the parallel-planner (concurrent execution with a planning phase).
+// When the loop ends, the sandbox is torn down and a host-side Claude agent
+// merges the shared branch into `main` locally (no push).
 //
 // Usage:
 //   npx tsx .sandcastle/main.mts
-// Or add to package.json:
-//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { execSync, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-// Maximum number of implement→review cycles to run before stopping.
-// Each cycle works on one issue. Raise this to process more issues per run.
-// Override per-run with the SANDCASTLE_MAX_ITERATIONS env var (e.g. =1 for a single iteration).
 const MAX_ITERATIONS = Number(process.env.SANDCASTLE_MAX_ITERATIONS ?? 10);
 
-// Hooks run inside the sandbox before the agent starts each iteration.
-// pnpm install --frozen-lockfile keeps installs reproducible against pnpm-lock.yaml.
 const hooks = {
   sandbox: { onSandboxReady: [{ command: "pnpm install --frozen-lockfile" }] },
 };
 
-// Skip copying node_modules: pnpm uses symlinks into a content-addressable
-// store, which doesn't survive a host->container copy cleanly. The
-// frozen-lockfile install above is fast enough on its own.
 const copyToWorktree: string[] = [];
 
 // ---------------------------------------------------------------------------
-// Main loop
+// Single shared sandbox: one branch, one worktree, stacked commits.
 // ---------------------------------------------------------------------------
 
-for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-  console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+const branch = `sandcastle/sequential-reviewer/${Date.now()}`;
+const sandbox = await sandcastle.createSandbox({
+  branch,
+  sandbox: docker(),
+  hooks,
+  copyToWorktree,
+});
 
-  // Generate a unique branch name for this iteration.
-  const branch = `sandcastle/sequential-reviewer/${Date.now()}`;
+let totalCommits = 0;
 
-  // Create a single sandbox that both the implementer and reviewer share.
-  // This gives both agents a real, named branch that persists across phases.
-  const sandbox = await sandcastle.createSandbox({
-    branch,
-    sandbox: docker(),
-    hooks,
-    copyToWorktree,
-  });
+try {
+  for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+    console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
-  try {
+    // Snapshot HEAD before the implementer runs so the reviewer can be
+    // scoped to *only* this iteration's new commits.
+    const headBefore = execSync("git rev-parse HEAD", {
+      cwd: sandbox.worktreePath,
+      encoding: "utf8",
+    }).trim();
+
     // -----------------------------------------------------------------------
-    // Phase 1: Implement
-    //
-    // A sonnet agent picks the next open issue, writes the
-    // implementation (using RGR: Red → Green → Repeat → Refactor), and
-    // commits the result.
-    //
-    // The agent signals completion via <promise>COMPLETE</promise> when done.
+    // Phase 1: Implement — RALPH picks one ready-for-agent issue and commits.
     // -----------------------------------------------------------------------
     const implement = await sandbox.run({
       name: "implementer",
       maxIterations: 100,
       agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/implement-prompt.md",
+      promptArgs: { ITERATION: String(iteration) },
     });
 
+    // No commits means RALPH found nothing actionable left — stop the loop
+    // (don't continue, or we'd spin on an empty queue).
     if (!implement.commits.length) {
-      console.log("Implementation agent made no commits. Skipping review.");
-      continue;
+      console.log(
+        "Implementer made no commits — no more actionable issues. Stopping loop.",
+      );
+      break;
     }
-
-    console.log(`\nImplementation complete on branch: ${branch}`);
-    console.log(`Commits: ${implement.commits.length}`);
+    totalCommits += implement.commits.length;
+    console.log(`Implementer added ${implement.commits.length} commit(s).`);
 
     // -----------------------------------------------------------------------
-    // Phase 2: Review
-    //
-    // A second sonnet agent reviews the diff of the branch produced by
-    // Phase 1. It uses the {{BRANCH}} prompt argument to inspect the right
-    // branch, and either approves or makes corrections directly on the branch.
+    // Phase 2: Review — only the commits the implementer just added.
     // -----------------------------------------------------------------------
-    await sandbox.run({
+    const review = await sandbox.run({
       name: "reviewer",
       maxIterations: 1,
       agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/review-prompt.md",
       promptArgs: {
         BRANCH: branch,
+        SINCE: headBefore,
+        ITERATION: String(iteration),
       },
     });
-
-    console.log("\nReview complete.");
-  } finally {
-    await sandbox.close();
+    totalCommits += review.commits.length;
+    console.log(`Reviewer added ${review.commits.length} commit(s).`);
   }
+} finally {
+  await sandbox.close();
 }
 
-console.log("\nAll done.");
+// ---------------------------------------------------------------------------
+// Phase 3: Host-side merge agent.
+// ---------------------------------------------------------------------------
+
+if (totalCommits === 0) {
+  console.log("\nNothing was committed across all iterations. Skipping merge.");
+  process.exit(0);
+}
+
+console.log(
+  `\nAll iterations complete. ${totalCommits} commit(s) on ${branch}.`,
+);
+console.log("Spawning host Claude to merge into main...\n");
+
+const mergePrompt = readFileSync("./.sandcastle/merge-prompt.md", "utf8")
+  .split("{{BRANCH}}")
+  .join(branch);
+
+const proc = spawn(
+  "claude",
+  [
+    "-p",
+    mergePrompt,
+    "--model",
+    "claude-opus-4-7",
+    "--dangerously-skip-permissions",
+  ],
+  { stdio: "inherit", cwd: process.cwd() },
+);
+
+const exitCode: number = await new Promise((resolve, reject) => {
+  proc.on("exit", (code) => resolve(code ?? 1));
+  proc.on("error", reject);
+});
+
+if (exitCode !== 0) {
+  console.error(`\nMerge agent exited with code ${exitCode}.`);
+  process.exit(exitCode);
+}
+
+console.log("\nMerge agent complete.");
