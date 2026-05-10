@@ -77,4 +77,8 @@ Use `>>` to append, never `>` (don't overwrite earlier entries).
 
 # Done
 
-Once complete, output <promise>COMPLETE</promise>.
+Emit **exactly one** of these completion signals when you finish, then stop:
+
+- `<promise>NEXT</promise>` — your normal exit signal. Use this whether you made refinement commits or decided no changes were needed.
+
+- `<promise>COMPLETE</promise>` — emit this only if the diff range `{{SINCE}}..HEAD` turned out to be empty (i.e. the implementer made no commits this iteration). This is unusual — the orchestrator only invokes you when the implementer has produced commits — but emit it if you find yourself in that state.

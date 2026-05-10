@@ -43,10 +43,19 @@ Pick the highest-priority open issue that is not blocked by another open issue. 
 
 ## Rules
 
-- Work on **one issue per iteration**. Do not attempt multiple issues in a single iteration.
+- **You will process exactly one or zero issues per session, then stop.** After you finish (or decide you cannot make progress on) the issue you picked, emit the completion signal described in the Done section and stop. Do **not** pick up a second issue in this session, even if more open issues are in the queue. The orchestrator will invoke you again for the next one.
 - Do not close an issue until you have committed the fix and verification passes.
 - Do not leave commented-out code or TODO comments in committed code.
-- If you are blocked (missing context, failing checks you cannot fix, external dependency), leave a comment on the issue and move on — do not close it.
+- If you are blocked on the issue you picked (missing context, failing checks you cannot fix, missing tooling in the sandbox like a docker daemon, ambiguous spec, external dependency, etc.):
+  1. Leave a comment on the issue clearly explaining the blocker and what would unblock it. Be specific — name the exact thing that's missing or unclear.
+  2. **Re-label the issue so future agents don't re-pick it.** Remove `ready-for-agent` and add one of:
+     - `ready-for-human` — environmental or capability blockers (no docker daemon in sandbox, needs prod credentials, requires interactive setup, etc.). Use this when a human could complete the work but the agent cannot from its current environment.
+     - `needs-info` — the issue spec is incomplete or ambiguous and needs a human to clarify before any agent can pick it up.
+     Run: `gh issue edit <N> --remove-label "ready-for-agent" --add-label "ready-for-human"` (or `needs-info`).
+  3. Do **not** close the issue.
+  4. Emit `<promise>NEXT</promise>` and stop.
+
+  **This re-labeling step is required.** If you skip it, the next iteration's agent will rediscover the same `ready-for-agent` issue from the queue and waste a full session re-encountering the same blocker. See `docs/agents/triage-labels.md` for the canonical label vocabulary.
 
 # Before you sign off
 
@@ -69,6 +78,10 @@ Use `>>` to append, never `>` (don't overwrite earlier entries).
 
 # Done
 
-When all actionable `ready-for-agent` issues are complete (or you are blocked on all remaining ones), output the completion signal:
+Emit **exactly one** of these completion signals when you finish, then stop:
 
-<promise>COMPLETE</promise>
+- `<promise>NEXT</promise>` — emit this if you worked on one issue this session (whether you closed it after committing the fix, or left a blocker comment without closing). This tells the orchestrator to run the reviewer and then invoke a fresh implementer for the next issue.
+
+- `<promise>COMPLETE</promise>` — emit this **only** when there are no actionable `ready-for-agent` issues to work on right now. That means the queue is empty, or every remaining issue is blocked by another still-open issue you cannot pick up. This tells the orchestrator that the entire run is finished.
+
+Do not emit both. Do not chain another issue after emitting either one.

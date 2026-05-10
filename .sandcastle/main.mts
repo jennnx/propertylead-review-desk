@@ -14,7 +14,8 @@
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { execSync, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -40,11 +41,41 @@ const sandbox = await sandcastle.createSandbox({
   copyToWorktree,
 });
 
+// Path of the per-agent log file sandcastle will append to. Mirrors
+// sandcastle's own buildLogFilename so our banner lands in the same file
+// the agent writes to (see node_modules/@ai-hero/sandcastle/dist/run.js).
+const logDir = join(process.cwd(), ".sandcastle", "logs");
+mkdirSync(logDir, { recursive: true });
+const sanitizedBranch = branch.replace(/[/\\:*?"<>|]/g, "-");
+
+// Prepend our own banner to the per-agent log so an operator reading the
+// file knows which outer iteration this session belongs to. Sandcastle's
+// own "Iteration N/M" header still appears below this — but that counter
+// is *Claude Code Turns within this session*, not a count of issues.
+function writeOuterIterationBanner(
+  agentName: "implementer" | "reviewer",
+  iteration: number,
+) {
+  const logPath = join(logDir, `${sanitizedBranch}-${agentName}.log`);
+  const banner = [
+    "",
+    "========================================================================",
+    `  Outer iteration ${iteration} of ${MAX_ITERATIONS} — ${agentName}`,
+    `  Note: the "Iteration N/M" line below counts Claude Code Turns within`,
+    `  this session (bounded by maxIterations on sandbox.run), NOT issues.`,
+    "========================================================================",
+    "",
+  ].join("\n");
+  appendFileSync(logPath, banner);
+}
+
 let totalCommits = 0;
 
 try {
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-    console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+    console.log(
+      `\n=== Outer iteration ${iteration}/${MAX_ITERATIONS} ===\n`,
+    );
 
     // Snapshot HEAD before the implementer runs so the reviewer can be
     // scoped to *only* this iteration's new commits.
@@ -56,21 +87,39 @@ try {
     // -----------------------------------------------------------------------
     // Phase 1: Implement — RALPH picks one ready-for-agent issue and commits.
     // -----------------------------------------------------------------------
+    writeOuterIterationBanner("implementer", iteration);
     const implement = await sandbox.run({
       name: "implementer",
-      maxIterations: 100,
+      maxIterations: 20,
       agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/implement-prompt.md",
       promptArgs: { ITERATION: String(iteration) },
+      completionSignal: [
+        "<promise>NEXT</promise>",
+        "<promise>COMPLETE</promise>",
+      ],
     });
 
-    // No commits means RALPH found nothing actionable left — stop the loop
-    // (don't continue, or we'd spin on an empty queue).
-    if (!implement.commits.length) {
+    // COMPLETE = no actionable issues left in the queue → end the run.
+    // No signal at all = budget exhausted without RALPH deciding → bail
+    // defensively rather than spin.
+    if (implement.completionSignal !== "<promise>NEXT</promise>") {
       console.log(
-        "Implementer made no commits — no more actionable issues. Stopping loop.",
+        implement.completionSignal === "<promise>COMPLETE</promise>"
+          ? "Implementer signaled COMPLETE — no actionable issues remaining. Stopping loop."
+          : "Implementer exhausted iteration budget without a completion signal. Stopping loop.",
       );
       break;
+    }
+
+    // NEXT with no commits means RALPH picked an issue and got blocked
+    // (per the prompt rules, it leaves a comment without closing). Skip
+    // the reviewer for this iteration and let the next implementer try.
+    if (!implement.commits.length) {
+      console.log(
+        "Implementer signaled NEXT but produced no commits (likely blocked on the picked issue). Skipping reviewer.",
+      );
+      continue;
     }
     totalCommits += implement.commits.length;
     console.log(`Implementer added ${implement.commits.length} commit(s).`);
@@ -78,9 +127,10 @@ try {
     // -----------------------------------------------------------------------
     // Phase 2: Review — only the commits the implementer just added.
     // -----------------------------------------------------------------------
+    writeOuterIterationBanner("reviewer", iteration);
     const review = await sandbox.run({
       name: "reviewer",
-      maxIterations: 1,
+      maxIterations: 20,
       agent: sandcastle.claudeCode("claude-opus-4-7"),
       promptFile: "./.sandcastle/review-prompt.md",
       promptArgs: {
@@ -88,6 +138,10 @@ try {
         SINCE: headBefore,
         ITERATION: String(iteration),
       },
+      completionSignal: [
+        "<promise>NEXT</promise>",
+        "<promise>COMPLETE</promise>",
+      ],
     });
     totalCommits += review.commits.length;
     console.log(`Reviewer added ${review.commits.length} commit(s).`);
