@@ -63,19 +63,18 @@ export async function GET(): Promise<Response> {
       : Promise.resolve<CheckFail>({ ok: false, error: "skipped (redis unreachable)" }),
   ]);
 
-  const body: HealthResponse = {
-    status: "ok",
-    checks: {
-      server: { ok: true },
-      database,
-      pgvector,
-      redis: redisReachable,
-      queue: queueInspectable,
-    },
+  const checks: HealthResponse["checks"] = {
+    server: { ok: true },
+    database,
+    pgvector,
+    redis: redisReachable,
+    queue: queueInspectable,
   };
-
-  const allOk = Object.values(body.checks).every((check) => check.ok);
-  if (!allOk) body.status = "fail";
+  const allOk = Object.values(checks).every((check) => check.ok);
+  const body: HealthResponse = {
+    status: allOk ? "ok" : "fail",
+    checks,
+  };
 
   return Response.json(body, { status: allOk ? 200 : 503 });
 }
