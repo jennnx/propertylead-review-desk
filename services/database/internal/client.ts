@@ -1,7 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-import { env } from "@/lib/env";
+import { env } from "../../../lib/env";
 
 let cached: PrismaClient | undefined;
 

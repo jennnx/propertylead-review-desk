@@ -1,6 +1,6 @@
 import { Redis, type RedisOptions } from "ioredis";
 
-import { env } from "@/lib/env";
+import { env } from "../../../lib/env";
 
 // `maxRetriesPerRequest: null` is required by BullMQ Workers and QueueEvents
 // (they hold blocking commands). Applying it to every connection keeps the

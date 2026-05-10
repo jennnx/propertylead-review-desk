@@ -166,6 +166,78 @@ Modules currently published:
 | `@/services/database` | `getPrismaClient`, `disconnectPrismaClient`, `checkDatabaseReachable`, `checkPgvectorInstalled`, plus the `PrismaClient` and `CheckResult` types.             |
 | `@/services/queue`    | `createRedisConnection`, `createQueue`, `createWorker`, `createQueueEvents`, `QUEUE_NAMES`, `checkRedisReachable`, `checkQueueInspectable`, plus BullMQ types. |
 
+## BullMQ worker
+
+The worker is a **separate Node process** from the Next.js web server. It owns no HTTP listener — it connects to Redis through `@/services/queue` and runs job processors for the queues declared in `QUEUE_NAMES`. Today only one queue is registered: `infra.smoke`, a permanent harmless diagnostic that verifies worker-side Redis, Postgres, and pgvector access. Future product/domain queues register their processors in `worker/index.ts` as well.
+
+The worker entrypoint lives at `worker/index.ts`. Its compilation tsconfig is `worker/tsconfig.json`, which extends the root tsconfig but emits CommonJS into `dist/` (the rest of the project is consumed by Next.js's bundler and stays `noEmit`).
+
+| Script              | What it does                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm worker:dev`   | Runs `worker/index.ts` directly through `tsx` with watch mode — restarts on source changes.                 |
+| `pnpm worker:build` | Compiles the worker (and the services/lib it imports) to plain JavaScript under `dist/` via `tsc`.          |
+| `pnpm worker:start` | Starts the compiled worker from `dist/worker/index.js` with `node`. Used in the production Compose stack.   |
+
+### Local development
+
+In separate terminals, alongside the dependency stack from `docker-compose.deps.yml`:
+
+```bash
+# 1. Dependencies (Postgres + Redis).
+docker compose -f docker-compose.deps.yml up -d
+
+# 2. Apply migrations once after the dependency stack is healthy.
+pnpm db:migrate
+
+# 3. Web app (Next.js dev server).
+pnpm dev
+
+# 4. Worker (this process).
+pnpm worker:dev
+```
+
+The worker logs `worker: started (pid=…, queues=N)` on boot and `worker[infra.smoke]: ready` once the BullMQ worker has connected to Redis. `SIGINT` / `SIGTERM` trigger a graceful shutdown that closes each BullMQ worker, the probe Redis connection, and the Prisma client.
+
+### Production
+
+The production Compose stack (added in a later tracer slice) builds a single application image and runs `pnpm worker:start` as the worker role. That command requires `dist/worker/index.js` to exist, so the image build runs `pnpm worker:build` after `pnpm install`.
+
+### The `infra.smoke` diagnostic job
+
+`worker/jobs/infra-smoke.ts` is the queue's processor. For each job, it:
+
+- Issues `PING` against a dedicated Redis connection (separate from BullMQ's internal pool, so the check measures the same code path callers use).
+- Runs `SELECT 1` through Prisma to verify Postgres reachability.
+- Runs `SELECT extname FROM pg_extension WHERE extname = 'vector'` to verify the pgvector extension is installed.
+- Returns a structured result of the form:
+
+```json
+{
+  "ok": true,
+  "checks": {
+    "redis":    { "ok": true },
+    "database": { "ok": true },
+    "pgvector": { "ok": true }
+  },
+  "worker": { "pid": 1234, "node": "v20.x.x", "platform": "linux" },
+  "jobId": "1",
+  "startedAt": "2026-05-10T00:00:00.000Z",
+  "completedAt": "2026-05-10T00:00:00.010Z"
+}
+```
+
+The job is intentionally read-only and **does not** call CRM, Claude, PromptFoo, or any future business integration, and does not write to product/domain tables. Its purpose is to prove the worker-side infrastructure path end-to-end without exercising real lead-analysis behaviour.
+
+To verify the job runs, enqueue one from any process that holds a `@/services/queue` handle (e.g. a one-off script or the upcoming verification command in #9):
+
+```ts
+import { QUEUE_NAMES, createQueue } from "@/services/queue";
+const q = createQueue(QUEUE_NAMES.INFRA_SMOKE);
+await q.add("ping", {});
+```
+
+The worker terminal should print `worker[infra.smoke]: job <id> completed`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
