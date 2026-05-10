@@ -14,7 +14,7 @@ import {
   createQueue,
   createQueueEvents,
 } from "@/services/queue";
-import type { InfraSmokeResult } from "../worker/jobs/infra-smoke";
+import type { InfraSmokeResult } from "@/worker/jobs/infra-smoke";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -32,19 +32,20 @@ function parseTimeout(): number {
 
 async function main(): Promise<number> {
   const timeoutMs = parseTimeout();
-  const queue = createQueue<Record<string, never>, InfraSmokeResult, typeof QUEUE_NAMES.INFRA_SMOKE>(
-    QUEUE_NAMES.INFRA_SMOKE,
+  const infraSmokeName = QUEUE_NAMES.INFRA_SMOKE;
+  const queue = createQueue<Record<string, never>, InfraSmokeResult, typeof infraSmokeName>(
+    infraSmokeName,
   );
-  const queueEvents = createQueueEvents(QUEUE_NAMES.INFRA_SMOKE);
+  const queueEvents = createQueueEvents(infraSmokeName);
 
   try {
     // Wait for QueueEvents to subscribe before enqueuing — otherwise a
     // very fast worker could complete the job before we are listening.
     await queueEvents.waitUntilReady();
 
-    const job = await queue.add(QUEUE_NAMES.INFRA_SMOKE, {});
+    const job = await queue.add(infraSmokeName, {});
     console.log(
-      `queue: enqueued ${QUEUE_NAMES.INFRA_SMOKE} job ${job.id}, waiting up to ${timeoutMs}ms for completion...`,
+      `queue: enqueued ${infraSmokeName} job ${job.id}, waiting up to ${timeoutMs}ms for completion...`,
     );
 
     let result: InfraSmokeResult;
