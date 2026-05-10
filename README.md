@@ -36,6 +36,43 @@ For TLS, network binding rationale, and the broader production story, see [ADR 0
 - **`prisma generate` runs via `postinstall`.** If you ever skip install hooks, run `pnpm db:generate` before build/typecheck. See [ADR 0001](docs/adr/0001-prisma-7-adapter-pattern.md).
 - **`waitUntilFinished` is restricted to `scripts/queue-verify.ts`.** Do not call it from a route handler or anywhere else in the request path. See [ADR 0006](docs/adr/0006-permanent-diagnostic-queue.md).
 
+## FAQ
+
+Common things you'll hit on day one. If your symptom matches one of these, try the fix before digging deeper.
+
+**"I started `pnpm dev` and the app is throwing `ECONNREFUSED` on `127.0.0.1:5432` (or `:6379`)."**
+Postgres (or Redis) isn't running. Bring up the deps stack first:
+```bash
+docker compose -f docker-compose.deps.yml up -d postgres redis
+```
+Or, if you have your own host services, point `DATABASE_URL` / `REDIS_URL` in `.env` at them.
+
+**"The web app works, but jobs I enqueue never seem to run."**
+The worker is a separate process — `pnpm dev` does not start it. Open a second terminal and run:
+```bash
+pnpm worker:dev
+```
+You should see `worker: started (pid=…, queues=1)` and `worker[infra.smoke]: ready`.
+
+**"I'm getting `relation "..." does not exist` or `type "vector" does not exist` from Prisma."**
+Migrations haven't been applied to the database. Run:
+```bash
+pnpm db:migrate
+```
+This applies pending migrations including the one that enables pgvector.
+
+**"TypeScript is complaining that Prisma types are missing, or `@prisma/client` can't be found."**
+The Prisma client wasn't generated for this checkout. Run:
+```bash
+pnpm db:generate
+```
+This normally runs automatically via `postinstall`, so `pnpm install` also fixes it.
+
+**"`docker compose ... up` complains that port 5432 (or 6379, or 3000) is already in use."**
+Something else on your host is on that port — usually your own Postgres, Redis, or another dev server. Two options:
+- Stop the conflicting service (e.g. `brew services stop postgresql@14`).
+- Keep using it: edit `.env` to point `DATABASE_URL` / `REDIS_URL` at the host service, and skip the matching service when bringing up the deps stack (e.g. `up -d postgres` only).
+
 ## Scripts
 
 | Script              | What                                                                  |
