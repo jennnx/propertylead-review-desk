@@ -107,6 +107,30 @@ pnpm db:check
 
 The script prints one line per check (`database` and `pgvector`) and exits non-zero on any failure.
 
+## Service modules
+
+Infrastructure code lives in deep service modules under `services/<name>/`. Each module exposes a narrow public API from its `index.ts`; the implementation lives in `services/<name>/internal/`. Callers — Next route handlers, the BullMQ worker, scripts, and future tests — should import from the module root and treat the internals as private:
+
+```ts
+// ✅ correct — import from the module root
+import { getPrismaClient, checkPgvectorInstalled } from "@/services/database";
+import { createQueue, QUEUE_NAMES } from "@/services/queue";
+
+// ❌ wrong — reaches into internals, will fail lint
+import { getPrismaClient } from "@/services/database/internal/client";
+```
+
+`pnpm lint` enforces this with `no-restricted-imports`: any non-service file that imports `@/services/*/internal/*` fails. Files inside `services/**` are exempt so a module can wire its own pieces together.
+
+Generic utilities (`lib/env.ts`, `lib/utils.ts`) sit outside `services/` and may be imported anywhere via `@/lib/...`.
+
+Modules currently published:
+
+| Module              | Public surface                                                                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@/services/database` | `getPrismaClient`, `disconnectPrismaClient`, `checkDatabaseReachable`, `checkPgvectorInstalled`, plus the `PrismaClient` and `CheckResult` types.             |
+| `@/services/queue`    | `createRedisConnection`, `createQueue`, `createWorker`, `createQueueEvents`, `QUEUE_NAMES`, `checkRedisReachable`, `checkQueueInspectable`, plus BullMQ types. |
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

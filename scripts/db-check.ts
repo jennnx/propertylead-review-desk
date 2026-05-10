@@ -1,46 +1,19 @@
 // Read-only database reachability + pgvector availability check.
 //
-// Used by `pnpm db:check`. Connects to DATABASE_URL via the pg driver
-// adapter, runs `SELECT 1`, then queries `pg_extension` for `vector`.
-// Prints a compact status line and exits non-zero on any failure so
-// operator/CI scripts can trust the exit code.
+// Used by `pnpm db:check`. Connects to DATABASE_URL through the
+// `@/services/database` public interface, runs the documented checks, and
+// exits non-zero on any failure so operator/CI scripts can trust the
+// exit code.
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-
-import { env } from "@/lib/env";
-
-type CheckResult = { ok: true } | { ok: false; error: string };
-
-async function checkDatabaseReachable(prisma: PrismaClient): Promise<CheckResult> {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-async function checkPgvectorInstalled(prisma: PrismaClient): Promise<CheckResult> {
-  try {
-    const rows = await prisma.$queryRaw<Array<{ extname: string }>>`
-      SELECT extname FROM pg_extension WHERE extname = 'vector'
-    `;
-    if (rows.length === 0) {
-      return {
-        ok: false,
-        error: "pgvector extension is not installed (run pnpm db:migrate)",
-      };
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
+import {
+  checkDatabaseReachable,
+  checkPgvectorInstalled,
+  disconnectPrismaClient,
+  getPrismaClient,
+} from "@/services/database";
 
 async function main(): Promise<number> {
-  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
-  const prisma = new PrismaClient({ adapter });
+  const prisma = getPrismaClient();
   try {
     const reachable = await checkDatabaseReachable(prisma);
     const pgvector = reachable.ok
@@ -55,7 +28,7 @@ async function main(): Promise<number> {
 
     return reachable.ok && pgvector.ok ? 0 : 1;
   } finally {
-    await prisma.$disconnect();
+    await disconnectPrismaClient();
   }
 }
 
