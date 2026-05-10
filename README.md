@@ -228,15 +228,13 @@ The production Compose stack (`docker-compose.yml`) builds a single application 
 
 The job is intentionally read-only and **does not** call CRM, Claude, PromptFoo, or any future business integration, and does not write to product/domain tables. Its purpose is to prove the worker-side infrastructure path end-to-end without exercising real lead-analysis behaviour.
 
-To verify the job runs, enqueue one from any process that holds a `@/services/queue` handle (e.g. a one-off script or the upcoming verification command in #9):
+To verify the job runs end-to-end against the live queue and worker, use the bundled post-deploy verification script:
 
-```ts
-import { QUEUE_NAMES, createQueue } from "@/services/queue";
-const q = createQueue(QUEUE_NAMES.INFRA_SMOKE);
-await q.add("ping", {});
+```bash
+pnpm queue:verify
 ```
 
-The worker terminal should print `worker[infra.smoke]: job <id> completed`.
+See [Post-deploy queue verification](#post-deploy-queue-verification) below for what the script does and the expected success output.
 
 ## Production Compose stack
 
@@ -292,6 +290,48 @@ docker compose down -v
 ### Environment variables
 
 The compose file sets `DATABASE_URL` and `REDIS_URL` to the in-network service hostnames (`postgres`, `redis`). Any other infrastructure variables required by future tracer slices should be added to the `x-app` anchor at the top of `docker-compose.yml` so all three roles inherit them.
+
+## Post-deploy queue verification
+
+`pnpm queue:verify` (script at `scripts/queue-verify.ts`) is the live end-to-end check that the deployed worker is actually consuming jobs. It connects to the configured Redis (`REDIS_URL`), enqueues an `infra.smoke` job, waits for completion using BullMQ's `Job.waitUntilFinished(queueEvents, ttl)` with an explicit timeout, asserts the structured result, and exits non-zero on timeout or failure.
+
+`waitUntilFinished` is intentionally restricted to this verification command — production request paths must not block waiting on background jobs.
+
+| Variable                   | Default    | Purpose                                                |
+| -------------------------- | ---------- | ------------------------------------------------------ |
+| `QUEUE_VERIFY_TIMEOUT_MS`  | `30000`    | Maximum time to wait for the diagnostic job to finish. |
+
+### Full local production-stack verification
+
+From a clean checkout, the end-to-end flow is:
+
+```bash
+# 1. Build the shared application image.
+docker compose build
+
+# 2. Start Postgres, Redis, the one-shot migration role, web, and worker.
+#    `migrate` runs `prisma migrate deploy` after Postgres/Redis are healthy
+#    and exits before web/worker boot.
+docker compose up -d
+
+# 3. Wait for the web container to report healthy. The container healthcheck
+#    hits /api/health internally; you can also poll it from the host:
+pnpm health:check
+# expected: every check `ok`, final line `status    : ok (HTTP 200)`
+
+# 4. Run the post-deploy queue verification against the live queue + worker.
+pnpm queue:verify
+# expected: per-check lines all `ok`, final line `status    : ok`, exit 0
+```
+
+Expected success signals:
+
+- `docker compose ps` shows `postgres` and `redis` as `healthy`, `migrate` as `exited (0)`, and `web` and `worker` as `running` (with `web` `healthy`).
+- `pnpm health:check` prints every dependency check as `ok` and exits `0`.
+- `pnpm queue:verify` prints `redis`, `database`, and `pgvector` checks as `ok`, the worker's pid/node/platform, and `status    : ok`, then exits `0`.
+- `docker compose logs worker` includes `worker[infra.smoke]: job <id> completed` for the verification job.
+
+If any step fails, fix the underlying issue (env, migration, healthcheck, or worker) before re-running — these scripts are deliberately conservative about exit codes so failures are loud.
 
 ## Learn More
 

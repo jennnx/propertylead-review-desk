@@ -14,6 +14,7 @@
     "db:status": "prisma migrate status",
     "db:check": "tsx scripts/db-check.ts",
     "health:check": "tsx scripts/health-check.ts",
+    "queue:verify": "tsx scripts/queue-verify.ts",
     "worker:dev": "tsx watch worker/index.ts",
     "worker:build": "tsc -p worker/tsconfig.json",
     "worker:start": "node dist/worker/index.js",
