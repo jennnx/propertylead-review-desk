@@ -1,341 +1,63 @@
 # Triage OS
 
-A [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Infrastructure foundation for an AI lead-analysis service. Next.js web app + BullMQ worker, backed by Postgres (pgvector) and Redis, with a production-style Docker Compose stack fronted by nginx.
 
-## Getting Started
-
-First, copy the sample environment file and adjust values for your local setup:
+## Quick start (local dev)
 
 ```bash
 cp .env.example .env
-```
-
-Then run the development server:
-
-```bash
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Configuration
-
-The app uses a single typed env object validated with [Zod](https://zod.dev), exported from `lib/env.ts`. Importing the module automatically loads variables from a local `.env` file via `dotenv`. Values already present in the process environment (Docker, CI, shell exports) win — `.env` only fills in missing values.
-
-Required infrastructure variables at this stage:
-
-| Variable       | Purpose                                                        |
-| -------------- | -------------------------------------------------------------- |
-| `DATABASE_URL` | PostgreSQL connection string (used by Prisma and the worker)   |
-| `REDIS_URL`    | Redis connection string (used by BullMQ queues and the worker) |
-
-Additional integration secrets (Claude, HubSpot, PromptFoo, etc.) will be added by their respective tracer slices and are intentionally not required yet.
-
-Postgres and Redis can either be **user-managed** (your own local services or hosted instances) or provided by the **optional local dependency Compose stack** described below. Either way, `DATABASE_URL` and `REDIS_URL` in your `.env` must point at the chosen instances. See `.env.example` for documented placeholders.
-
-## Local dependency stack (optional)
-
-`docker-compose.deps.yml` provides Postgres (with pgvector) and Redis for developers who do not want to install or manage those services manually. It does **not** run the Next.js web app or the BullMQ worker — keep running those with `pnpm dev` so HMR/Turbopack stays available.
-
-Image tags are pinned deliberately:
-
-| Service  | Image                                  | Notes                                                                |
-| -------- | -------------------------------------- | -------------------------------------------------------------------- |
-| Postgres | `pgvector/pgvector:0.8.2-pg17-trixie`  | Postgres 17 with pgvector 0.8.2 baked into the image.                |
-| Redis    | `redis:7.4-alpine3.21`                 | Redis 7.4 on Alpine 3.21.                                            |
-
-Commands:
-
-```bash
-# Start Postgres + Redis in the background.
-docker compose -f docker-compose.deps.yml up -d
-
-# Tail logs.
-docker compose -f docker-compose.deps.yml logs -f
-
-# Stop the stack but keep the data volumes.
-docker compose -f docker-compose.deps.yml down
-
-# Stop the stack and discard the Postgres/Redis volumes (destructive).
-docker compose -f docker-compose.deps.yml down -v
-```
-
-The default credentials match `.env.example` (`postgres:postgres@localhost:5432/triage_os` and `redis://localhost:6379`), so a fresh `cp .env.example .env` already points the app at the Compose stack. If you prefer your own Postgres/Redis instances, edit `.env` instead and skip the Compose commands.
-
-### Usage
-
-```ts
-import { env } from "@/lib/env";
-
-console.log(env.DATABASE_URL);
-```
-
-The schema validates lazily on first property access and throws a useful error listing every missing or malformed variable. Linting (`pnpm lint`) and typechecking do not trigger validation, so static checks succeed even without a populated `.env`.
-
-## Database (Prisma + pgvector)
-
-The project uses [Prisma](https://www.prisma.io) (v7) for schema and migrations against PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension. The schema (`prisma/schema.prisma`) intentionally defines no product/domain models yet — tracer feature slices add real models when they need them.
-
-In Prisma 7 the connection URL no longer lives inside `schema.prisma`. The runtime client connects through the `@prisma/adapter-pg` driver adapter (reading `DATABASE_URL` from the env module), and migration commands read the URL from `prisma.config.ts`.
-
-Scripts:
-
-| Script               | What it does                                                                  |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `pnpm db:generate`   | Regenerates the Prisma client. Runs automatically as `postinstall`.           |
-| `pnpm db:migrate`    | Applies pending migrations (`prisma migrate deploy`). Use in production/CI.   |
-| `pnpm db:migrate:dev`| Creates and applies new migrations from schema changes during development.    |
-| `pnpm db:status`     | Shows pending vs. applied migrations (`prisma migrate status`).               |
-| `pnpm db:check`      | Read-only check: connects to `DATABASE_URL` and verifies pgvector is enabled. |
-
-### Ordering
-
-- **Generate before build/typecheck** — `pnpm install` runs `prisma generate` via `postinstall` so generated types are available before `pnpm build`, `pnpm exec tsc --noEmit`, or `pnpm lint`. `pnpm build` also re-runs `prisma generate` defensively before `next build`. If you skipped install hooks, run `pnpm db:generate` manually.
-- **Migrate before runtime start** — `pnpm db:migrate` (or `db:migrate:dev` locally) must run before `pnpm dev`/`pnpm start` and before the BullMQ worker starts. The production Compose stack will run a one-shot migration role for this; locally, run it once after starting the dependency stack and any time you pull new migrations.
-
-### Initial pgvector setup
-
-The baseline migration (`prisma/migrations/20260510000000_init/migration.sql`) issues `CREATE EXTENSION IF NOT EXISTS vector;`. Both the local dependency Compose stack and the production stack use the `pgvector/pgvector` image, so this only registers the extension in the configured database — no extension binaries are downloaded at migrate time.
-
-Verify manually with:
-
-```bash
-pnpm db:check
-```
-
-The script prints one line per check (`database` and `pgvector`) and exits non-zero on any failure.
-
-## Web health endpoint
-
-`GET /api/health` is a read-only endpoint exposed by the Next.js app. It verifies the web process and its infrastructure dependencies without enqueuing jobs or mutating database state. Both local debugging and the production container healthcheck use it.
-
-The response is JSON of the shape:
-
-```json
-{
-  "status": "ok",
-  "checks": {
-    "server":   { "ok": true },
-    "database": { "ok": true },
-    "pgvector": { "ok": true },
-    "redis":    { "ok": true },
-    "queue":    { "ok": true }
-  }
-}
-```
-
-If any dependency check fails, the corresponding entry carries an `error` string, `status` becomes `"fail"`, and the endpoint returns HTTP **503** instead of **200**.
-
-Call it locally:
-
-```bash
-# Start the dev server first (separate terminal).
-pnpm dev
-
-# Hit the endpoint directly.
-curl -i http://localhost:3000/api/health
-
-# Or run the bundled check script — same fetch, with a non-zero exit code
-# on any failure (override the base URL with HEALTH_URL=... if needed).
-pnpm health:check
-```
-
-## Service modules
-
-Infrastructure code lives in deep service modules under `services/<name>/`. Each module exposes a narrow public API from its `index.ts`; the implementation lives in `services/<name>/internal/`. Callers — Next route handlers, the BullMQ worker, scripts, and future tests — should import from the module root and treat the internals as private:
-
-```ts
-// ✅ correct — import from the module root
-import { getPrismaClient, checkPgvectorInstalled } from "@/services/database";
-import { createQueue, QUEUE_NAMES } from "@/services/queue";
-
-// ❌ wrong — reaches into internals, will fail lint
-import { getPrismaClient } from "@/services/database/internal/client";
-```
-
-`pnpm lint` enforces this with `no-restricted-imports`: any non-service file that imports `@/services/*/internal/*` fails. Files inside `services/**` are exempt so a module can wire its own pieces together.
-
-Generic utilities (`lib/env.ts`, `lib/utils.ts`) sit outside `services/` and may be imported anywhere via `@/lib/...`.
-
-Modules currently published:
-
-| Module              | Public surface                                                                                                                                                  |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@/services/database` | `getPrismaClient`, `disconnectPrismaClient`, `checkDatabaseReachable`, `checkPgvectorInstalled`, plus the `PrismaClient` and `CheckResult` types.             |
-| `@/services/queue`    | `createRedisConnection`, `createQueue`, `createWorker`, `createQueueEvents`, `QUEUE_NAMES`, `checkRedisReachable`, `checkQueueInspectable`, plus BullMQ types. |
-
-## BullMQ worker
-
-The worker is a **separate Node process** from the Next.js web server. It owns no HTTP listener — it connects to Redis through `@/services/queue` and runs job processors for the queues declared in `QUEUE_NAMES`. Today only one queue is registered: `infra.smoke`, a permanent harmless diagnostic that verifies worker-side Redis, Postgres, and pgvector access. Future product/domain queues register their processors in `worker/index.ts` as well.
-
-The worker entrypoint lives at `worker/index.ts`. Its compilation tsconfig is `worker/tsconfig.json`, which extends the root tsconfig but emits CommonJS into `dist/` (the rest of the project is consumed by Next.js's bundler and stays `noEmit`).
-
-| Script              | What it does                                                                                                |
-| ------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `pnpm worker:dev`   | Runs `worker/index.ts` directly through `tsx` with watch mode — restarts on source changes.                 |
-| `pnpm worker:build` | Compiles the worker (and the services/lib it imports) to plain JavaScript under `dist/` via `tsc`.          |
-| `pnpm worker:start` | Starts the compiled worker from `dist/worker/index.js` with `node`. Used in the production Compose stack.   |
-
-### Local development
-
-In separate terminals, alongside the dependency stack from `docker-compose.deps.yml`:
-
-```bash
-# 1. Dependencies (Postgres + Redis).
-docker compose -f docker-compose.deps.yml up -d
-
-# 2. Apply migrations once after the dependency stack is healthy.
+docker compose -f docker-compose.deps.yml up -d postgres redis
+pnpm install
 pnpm db:migrate
-
-# 3. Web app (Next.js dev server).
-pnpm dev
-
-# 4. Worker (this process).
-pnpm worker:dev
+pnpm dev          # Next.js with HMR on http://localhost:3000
+pnpm worker:dev   # BullMQ worker — separate terminal
 ```
 
-The worker logs `worker: started (pid=…, queues=N)` on boot and `worker[infra.smoke]: ready` once the BullMQ worker has connected to Redis. `SIGINT` / `SIGTERM` trigger a graceful shutdown that closes each BullMQ worker, the probe Redis connection, and the Prisma client.
+If you already run Postgres or Redis on your host, point `DATABASE_URL` / `REDIS_URL` in `.env` at them and omit the matching service from the `docker compose -f docker-compose.deps.yml up -d` line (e.g. `up -d postgres` only).
 
-### Production
-
-The production Compose stack (`docker-compose.yml`) builds a single application image and runs `pnpm worker:start` as the worker role. That command requires `dist/worker/index.js` to exist, so the image build runs `pnpm worker:build` after `pnpm install`. See [Production Compose stack](#production-compose-stack) below for the full ordering across web, worker, and migration roles.
-
-### The `infra.smoke` diagnostic job
-
-`worker/jobs/infra-smoke.ts` is the queue's processor. For each job, it:
-
-- Issues `PING` against a dedicated Redis connection (separate from BullMQ's internal pool, so the check measures the same code path callers use).
-- Runs `SELECT 1` through Prisma to verify Postgres reachability.
-- Runs `SELECT extname FROM pg_extension WHERE extname = 'vector'` to verify the pgvector extension is installed.
-- Returns a structured result of the form:
-
-```json
-{
-  "ok": true,
-  "checks": {
-    "redis":    { "ok": true },
-    "database": { "ok": true },
-    "pgvector": { "ok": true }
-  },
-  "worker": { "pid": 1234, "node": "v20.x.x", "platform": "linux" },
-  "jobId": "1",
-  "startedAt": "2026-05-10T00:00:00.000Z",
-  "completedAt": "2026-05-10T00:00:00.010Z"
-}
-```
-
-The job is intentionally read-only and **does not** call CRM, Claude, PromptFoo, or any future business integration, and does not write to product/domain tables. Its purpose is to prove the worker-side infrastructure path end-to-end without exercising real lead-analysis behaviour.
-
-To verify the job runs end-to-end against the live queue and worker, use the bundled post-deploy verification script:
+## Deploy (VPS)
 
 ```bash
-pnpm queue:verify
+git clone <repo> && cd propertylead-review-desk
+cp .env.example .env
+# Edit .env: set POSTGRES_PASSWORD to a strong random value
+docker compose up -d --build
 ```
 
-See [Post-deploy queue verification](#post-deploy-queue-verification) below for what the script does and the expected success output.
+Then open firewall port 80 (and 443 if you add TLS) and point DNS at the VPS. The compose stack runs Postgres, Redis, a one-shot migration role, web, worker, and nginx; nginx is the only service publicly bound.
 
-## Production Compose stack
+For TLS, network binding rationale, and the broader production story, see [ADR 0005](docs/adr/0005-prod-network-binding.md).
 
-`docker-compose.yml` (root of the repo, distinct from the local-only `docker-compose.deps.yml`) describes the production runtime. It builds **one** application image from `Dockerfile` and runs three roles from it:
+## Gotchas
 
-| Role      | Command              | Restart policy   |
-| --------- | -------------------- | ---------------- |
-| `migrate` | `pnpm db:migrate`    | `no` (one-shot)  |
-| `web`     | `pnpm start`         | `unless-stopped` |
-| `worker`  | `pnpm worker:start`  | `unless-stopped` |
+- **`POSTGRES_PASSWORD` is locked in at first `docker compose up`.** Postgres initialises the data volume with whatever value is set at first boot; changing it later requires `docker compose down -v`, which destroys the volume. Set it before the first up. See [ADR 0005](docs/adr/0005-prod-network-binding.md).
+- **The worker is a separate process** — `pnpm dev` does *not* start it. Run `pnpm worker:dev` in a second terminal. See [ADR 0002](docs/adr/0002-worker-as-separate-process.md).
+- **Import services from the public root, not `internal/`.** `pnpm lint` will fail otherwise. See [ADR 0004](docs/adr/0004-service-modules-with-internal.md).
+- **`prisma generate` runs via `postinstall`.** If you ever skip install hooks, run `pnpm db:generate` before build/typecheck. See [ADR 0001](docs/adr/0001-prisma-7-adapter-pattern.md).
+- **`waitUntilFinished` is restricted to `scripts/queue-verify.ts`.** Do not call it from a route handler or anywhere else in the request path. See [ADR 0006](docs/adr/0006-permanent-diagnostic-queue.md).
 
-Postgres and Redis run as separate services using the same pinned tags as the dev stack:
+## Scripts
 
-| Service    | Image                                  |
-| ---------- | -------------------------------------- |
-| `postgres` | `pgvector/pgvector:0.8.2-pg17-trixie`  |
-| `redis`    | `redis:7.4-alpine3.21`                 |
+| Script              | What                                                                  |
+| ------------------- | --------------------------------------------------------------------- |
+| `pnpm dev`          | Next.js dev server (HMR / Turbopack)                                  |
+| `pnpm worker:dev`   | BullMQ worker in watch mode (tsx)                                     |
+| `pnpm build`        | Production build (`prisma generate` + `next build`)                   |
+| `pnpm worker:build` | Compile worker to `dist/` via `tsc`                                   |
+| `pnpm start`        | Run the Next.js production server                                     |
+| `pnpm worker:start` | Run the compiled worker from `dist/`                                  |
+| `pnpm db:migrate`   | `prisma migrate deploy` — apply pending migrations                    |
+| `pnpm db:migrate:dev` | Create + apply a new migration from schema changes (local only)     |
+| `pnpm db:generate`  | Regenerate Prisma client (also runs as `postinstall`)                 |
+| `pnpm db:status`    | Show pending vs. applied migrations                                   |
+| `pnpm db:check`     | Read-only probe: connectivity + pgvector                              |
+| `pnpm health:check` | Probe `GET /api/health` (override base via `HEALTH_URL`)              |
+| `pnpm queue:verify` | End-to-end queue + worker probe via `infra.smoke` job                 |
+| `pnpm lint`         | ESLint                                                                |
+| `pnpm exec tsc --noEmit` | Type check                                                       |
 
-### Startup ordering
+## Reference
 
-Dependency readiness is enforced by Compose `depends_on` conditions, not by container start order:
-
-1. `postgres` and `redis` become **healthy** (via their native `pg_isready` / `redis-cli ping` healthchecks).
-2. `migrate` then starts, runs `prisma migrate deploy`, and exits.
-3. `web` and `worker` only start once `migrate` has completed **successfully** (`service_completed_successfully`). A failed migration aborts the rollout instead of leaving the database half-migrated.
-4. The `web` container's own healthcheck hits the read-only `GET /api/health` endpoint so the orchestrator marks it unhealthy when any infrastructure dependency drops.
-
-### Build and run
-
-```bash
-# Build the shared application image.
-docker compose build
-
-# Run the migration gate, then start web + worker.
-docker compose up -d
-
-# Tail logs across the whole stack.
-docker compose logs -f
-
-# Or follow a single role.
-docker compose logs -f web
-docker compose logs -f worker
-
-# Stop the stack but keep Postgres/Redis volumes.
-docker compose down
-
-# Stop the stack and discard the volumes (destructive).
-docker compose down -v
-```
-
-`docker compose up` will run `migrate` to completion before `web`/`worker` boot. To re-run only the migration step against a running stack, use `docker compose run --rm migrate`.
-
-### Environment variables
-
-The compose file sets `DATABASE_URL` and `REDIS_URL` to the in-network service hostnames (`postgres`, `redis`). Any other infrastructure variables required by future tracer slices should be added to the `x-app` anchor at the top of `docker-compose.yml` so all three roles inherit them.
-
-## Post-deploy queue verification
-
-`pnpm queue:verify` (script at `scripts/queue-verify.ts`) is the live end-to-end check that the deployed worker is actually consuming jobs. It connects to the configured Redis (`REDIS_URL`), enqueues an `infra.smoke` job, waits for completion using BullMQ's `Job.waitUntilFinished(queueEvents, ttl)` with an explicit timeout, asserts the structured result, and exits non-zero on timeout or failure.
-
-`waitUntilFinished` is intentionally restricted to this verification command — production request paths must not block waiting on background jobs.
-
-| Variable                   | Default    | Purpose                                                |
-| -------------------------- | ---------- | ------------------------------------------------------ |
-| `QUEUE_VERIFY_TIMEOUT_MS`  | `30000`    | Maximum time to wait for the diagnostic job to finish. |
-
-### Full local production-stack verification
-
-From a clean checkout, the end-to-end flow is:
-
-```bash
-# 1. Build the shared application image.
-docker compose build
-
-# 2. Start Postgres, Redis, the one-shot migration role, web, and worker.
-#    `migrate` runs `prisma migrate deploy` after Postgres/Redis are healthy
-#    and exits before web/worker boot.
-docker compose up -d
-
-# 3. Wait for the web container to report healthy. The container healthcheck
-#    hits /api/health internally; you can also poll it from the host:
-pnpm health:check
-# expected: every check `ok`, final line `status    : ok (HTTP 200)`
-
-# 4. Run the post-deploy queue verification against the live queue + worker.
-pnpm queue:verify
-# expected: per-check lines all `ok`, final line `status    : ok`, exit 0
-```
-
-Expected success signals:
-
-- `docker compose ps` shows `postgres` and `redis` as `healthy`, `migrate` as `exited (0)`, and `web` and `worker` as `running` (with `web` `healthy`).
-- `pnpm health:check` prints every dependency check as `ok` and exits `0`.
-- `pnpm queue:verify` prints `redis`, `database`, and `pgvector` checks as `ok`, the worker's pid/node/platform, and `status    : ok`, then exits `0`.
-- `docker compose logs worker` includes `worker[infra.smoke]: job <id> completed` for the verification job.
-
-If any step fails, fix the underlying issue (env, migration, healthcheck, or worker) before re-running — these scripts are deliberately conservative about exit codes so failures are loud.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records. Read when you find a non-obvious choice and want to know why.
+- [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) — agent-facing instructions for working in this repo.
+- [`docs/agents/`](docs/agents/) — agent skill mappings (issue tracker, triage labels, domain docs).

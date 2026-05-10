@@ -1,9 +1,10 @@
 # Production-style Compose stack for Triage OS.
 #
 # One shared application image (built from ./Dockerfile) runs three roles —
-# `web`, `worker`, and a one-shot `migrate` gate. Postgres and Redis use the
-# same pinned images as docker-compose.deps.yml so the local and production
-# data planes are identical.
+# `web`, `worker`, and a one-shot `migrate` gate. An `nginx` reverse proxy
+# fronts `web` so port 80 is the only public surface. Postgres and Redis use
+# the same pinned images as docker-compose.deps.yml so the local and
+# production data planes are identical.
 #
 # Startup ordering is enforced by Compose dependency conditions, not by
 # implicit container start order:
@@ -16,11 +17,20 @@
 #                          .------------+------------.
 #                          v                         v
 #                         web                      worker
-#                  (next start)              (node dist/worker/index.js)
+#                       (next start)        (node dist/worker/index.js)
+#                          |
+#                          v
+#                        nginx  (public :80 -> web:3000)
 #
 # Image tags pinned deliberately (matches docker-compose.deps.yml):
 #   * pgvector/pgvector:0.8.2-pg17-trixie  — Postgres 17 with pgvector 0.8.2
 #   * redis:7.4-alpine3.21                 — Redis 7.4 LTS on Alpine 3.21
+#   * nginx:1.27-alpine                    — Nginx 1.27 mainline on Alpine
+#
+# Credentials are read from the shell environment (or a `.env` file Compose
+# auto-loads), with development defaults that match docker-compose.deps.yml
+# so a fresh checkout works without configuration. **On a real VPS, set
+# POSTGRES_PASSWORD to a strong value in `.env` before `docker compose up`.**
 
 x-app: &app
   image: triage-os/app:local
@@ -29,7 +39,7 @@ x-app: &app
     dockerfile: Dockerfile
   environment:
     NODE_ENV: production
-    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/triage_os
+    DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-triage_os}
     REDIS_URL: redis://redis:6379
 
 services:
@@ -37,13 +47,15 @@ services:
     image: pgvector/pgvector:0.8.2-pg17-trixie
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: triage_os
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-triage_os}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d triage_os"]
+      test:
+        - "CMD-SHELL"
+        - 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
       interval: 5s
       timeout: 5s
       retries: 10
@@ -52,11 +64,12 @@ services:
     image: redis:7.4-alpine3.21
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
-    # Published so host-side `pnpm queue:verify` can reach the live queue
-    # via REDIS_URL=redis://localhost:6379 (mirrors the web role's 3000
-    # mapping that lets `pnpm health:check` run from the host).
+    # Bound to localhost only so the queue is reachable for the host-side
+    # `pnpm queue:verify` script when run from the same VPS, but NOT exposed
+    # to the public internet. Redis has no auth configured here; opening it
+    # publicly would let any caller flush the queue.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -84,8 +97,11 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # Bound to localhost only — public traffic enters via the nginx service
+    # below. The localhost bind keeps host-side `pnpm health:check` working
+    # when you're SSHed into the VPS.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     command: ["pnpm", "start"]
     # Container-level healthcheck hits the read-only /api/health endpoint.
     # Node 20+ has a global `fetch`, so no extra HTTP client is required.
@@ -107,6 +123,22 @@ services:
       migrate:
         condition: service_completed_successfully
     command: ["pnpm", "worker:start"]
+
+  # Public-facing reverse proxy. Terminates HTTP on :80, forwards to the
+  # web container on its internal :3000. TLS is intentionally NOT handled
+  # in this file — on a real VPS, terminate TLS at the host (certbot +
+  # nginx config, Cloudflare in front, or replace this service with
+  # Caddy/Traefik for automatic Let's Encrypt). See README for the path.
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
 
 volumes:
   postgres-data:
