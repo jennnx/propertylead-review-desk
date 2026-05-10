@@ -43,7 +43,13 @@ async function main(): Promise<number> {
     // very fast worker could complete the job before we are listening.
     await queueEvents.waitUntilReady();
 
-    const job = await queue.add(infraSmokeName, {});
+    // Discard the record after completion — this command runs after every
+    // deploy and the only thing we care about is the result captured below,
+    // which still arrives via the QueueEvents `completed`/`failed` event.
+    const job = await queue.add(infraSmokeName, {}, {
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
     console.log(
       `queue: enqueued ${infraSmokeName} job ${job.id}, waiting up to ${timeoutMs}ms for completion...`,
     );
