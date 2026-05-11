@@ -7,6 +7,7 @@ export const REQUIRED_TEST_ENV = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/triage_os",
   REDIS_URL: "redis://localhost:6379",
   ANTHROPIC_API_KEY: "test-anthropic-key",
+  HUBSPOT_CLIENT_SECRET: "test-hubspot-client-secret",
 } satisfies Env;
 
 type TestEnvKey = keyof Env;
