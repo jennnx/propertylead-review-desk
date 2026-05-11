@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Verification
 
-Package manager is **pnpm**. Before committing, run `pnpm lint` and `pnpm exec tsc --noEmit`. No test runner is configured — do not invent one.
+Package manager is **pnpm**. Before committing, run `pnpm lint`, `pnpm exec tsc --noEmit`, and relevant tests.
 
 # Components
 

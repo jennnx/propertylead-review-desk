@@ -39,3 +39,32 @@ For the full rationale, examples, and Next.js route guidance, see [ADR 0008](doc
 ## Naming
 
 Infrastructure and deployment docs currently use `Triage OS`. App metadata uses `PropertyLead Review Desk`. Until the product naming is reconciled, use existing terms deliberately and avoid inventing new names in architecture docs.
+
+## Language
+
+**HubSpot Webhook Event**:
+An authenticated notification sent by HubSpot to the app before the app decides whether it represents a lead workflow.
+_Avoid_: Lead, notification
+
+**HubSpot Webhook Batch**:
+One inbound HubSpot webhook request containing one or more HubSpot webhook events.
+_Avoid_: Single event request
+
+**HubSpot Integration**:
+The app's only supported CRM integration, configured as a HubSpot developer project for one company's HubSpot account.
+_Avoid_: CRM integration, provider integration
+
+**HubSpot Webhook URL**:
+The absolute endpoint HubSpot calls, derived from the app base URL and the HubSpot webhook route path.
+_Avoid_: Callback URL, inferred URL
+
+## Relationships
+
+- A **HubSpot Webhook Event** may later produce or update a lead review workflow, but ingestion does not decide that mapping.
+- A **HubSpot Webhook Batch** contains one or more **HubSpot Webhook Events**.
+- A **HubSpot Integration** receives **HubSpot Webhook Events** from exactly one HubSpot account.
+- A **HubSpot Integration** has exactly one **HubSpot Webhook URL**.
+
+## Flagged ambiguities
+
+- "HubSpot setup" means a HubSpot developer project with static auth, not a legacy private app UI setup.

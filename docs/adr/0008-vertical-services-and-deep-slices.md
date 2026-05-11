@@ -121,7 +121,7 @@ Good first slices for this product might be:
 
 Each slice should name the service operation first, add the smallest route/UI/worker surface needed to exercise it, and keep implementation details behind the service public API.
 
-When a test runner exists, tests should target public service behavior and externally visible outcomes. This scaffold currently has no test runner configured, so do not invent one just to satisfy this ADR. Use the repo's required checks until testing infrastructure is intentionally added.
+Tests should target public service behavior and externally visible outcomes.
 
 ## What This Is Not
 
