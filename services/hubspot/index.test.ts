@@ -1,7 +1,6 @@
-import { createHmac } from "node:crypto";
-
 import { describe, expect, test, vi } from "vitest";
 
+import { createHmacSignature } from "@/lib/hmac-signature";
 import { importWithRequiredEnv } from "@/tests/env";
 
 describe("HubSpot Integration service", () => {
@@ -39,12 +38,10 @@ describe("HubSpot Integration service", () => {
       },
     ];
     const rawBody = JSON.stringify(rawEvents);
-    const signature = createHmac("sha256", "test-hubspot-client-secret")
-      .update(
-        `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
-        "utf8",
-      )
-      .digest("base64");
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
 
     const receipt = await receiveHubSpotWebhookBatch({

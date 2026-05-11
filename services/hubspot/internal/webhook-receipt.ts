@@ -1,6 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-
 import { env } from "../../../lib/env";
+import { isHmacSignatureValid } from "../../../lib/hmac-signature";
 
 const HUBSPOT_SIGNATURE_MAX_AGE_MS = 5 * 60 * 1000;
 
@@ -84,11 +83,13 @@ function verifyHubSpotSignature({
   const source = `${method.toUpperCase()}${decodeHubSpotSignatureUri(
     webhookUrl,
   )}${rawBody}${timestamp}`;
-  const expectedSignature = createHmac("sha256", env.HUBSPOT_CLIENT_SECRET)
-    .update(source, "utf8")
-    .digest("base64");
-
-  if (!constantTimeEqual(expectedSignature, signature)) {
+  if (
+    !isHmacSignatureValid({
+      secret: env.HUBSPOT_CLIENT_SECRET,
+      source,
+      signature,
+    })
+  ) {
     throw new HubSpotWebhookReceiptError(
       "HubSpot webhook request signature is invalid",
       "unauthorized",
@@ -128,15 +129,6 @@ function isRawHubSpotWebhookEvent(
   value: unknown,
 ): value is HubSpotWebhookEvent {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function constantTimeEqual(expected: string, actual: string): boolean {
-  const expectedBuffer = Buffer.from(expected);
-  const actualBuffer = Buffer.from(actual);
-  return (
-    expectedBuffer.byteLength === actualBuffer.byteLength &&
-    timingSafeEqual(expectedBuffer, actualBuffer)
-  );
 }
 
 function decodeHubSpotSignatureUri(uri: string): string {
