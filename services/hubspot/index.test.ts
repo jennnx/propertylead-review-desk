@@ -59,4 +59,216 @@ describe("HubSpot Integration service", () => {
       { eventCount: 2 },
     );
   });
+
+  test("rejects requests missing the HubSpot signature header as unauthenticated", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([{ eventId: 1001 }]);
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature: null,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "unauthorized",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects requests missing the HubSpot timestamp header as unauthenticated", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([{ eventId: 1001 }]);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp: null,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "unauthorized",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects requests with an invalid HubSpot v3 signature as unauthenticated", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([{ eventId: 1001 }]);
+    const wrongSignature = createHmacSignature({
+      secret: "not-the-real-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature: wrongSignature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "unauthorized",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects requests with a stale HubSpot timestamp as unauthenticated", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([{ eventId: 1001 }]);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 5 * 60 * 1000 + 1),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "unauthorized",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests with malformed JSON as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = "{not valid json";
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests whose JSON body is not an array as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify({ eventId: 1001 });
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests with an empty array body as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([]);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests whose array contains non-object entries as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([{ eventId: 1001 }, "not-an-object"]);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
 });
