@@ -163,4 +163,112 @@ describe("HubSpot Integration service", () => {
     });
     expect(consoleInfo).not.toHaveBeenCalled();
   });
+
+  test("rejects authenticated requests with malformed JSON as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = "{not valid json";
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests whose JSON body is not an array as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify({ eventId: 1001 });
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests with an empty array body as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([]);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test("rejects authenticated requests whose array contains non-object entries as a bad payload", async () => {
+    const { receiveHubSpotWebhookBatch, HubSpotWebhookReceiptError } =
+      await importWithRequiredEnv(() => import("./index"));
+    const timestamp = "1710000000000";
+    const rawBody = JSON.stringify([{ eventId: 1001 }, "not-an-object"]);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toMatchObject({
+      constructor: HubSpotWebhookReceiptError,
+      reason: "bad_request",
+    });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
 });
