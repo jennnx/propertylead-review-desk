@@ -1,5 +1,20 @@
 # Project Context
 
+## Product Intent
+
+PropertyLead Review Desk helps real estate agents handle incoming leads by enriching CRM records and writing the enrichment back to the CRM. The app is not the source of lead capture and is not intended to replace the CRM.
+
+The basic workflow is:
+
+1. A CRM sends an incoming lead to this app through a webhook or similar integration.
+2. The app normalizes and enriches the lead using Claude's API and supporting project data.
+3. The app decides the CRM writeback payload: tags, insights, prioritization, and any other review metadata needed by the real estate agent.
+4. The app writes those enhancements back to the CRM so the agent can continue working from the CRM.
+
+The core operator workflow is CRM-in, CRM-out. Inputs originate from the CRM, and the CRM remains the place where the real estate agent sees and acts on the enriched lead. That does not make this app stateless. PropertyLead Review Desk still owns platform state and workflows needed to make CRM writeback trustworthy: human review, human-in-the-loop messaging confirmations, enrichment traces, queued work, eval results, diagnostics, and observability around what the app decided and why.
+
+Durable product value is delivered by improving the CRM record, but this platform must stay inspectable. Internal UI, queues, evals, tests, RAG, diagnostics, and review screens exist so operators and maintainers can understand, verify, and improve the enrichment/writeback process without turning this app into the CRM itself.
+
 ## How We Code
 
 This repo uses vertical services, also called deep slices, as the default architecture for product and infrastructure work. A service owns a capability end to end: the public operation, policy, persistence orchestration, provider calls, queues, and failure handling that belong to that capability.
