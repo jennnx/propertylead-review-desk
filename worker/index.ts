@@ -5,6 +5,7 @@
 // for permanent infrastructure queues. Future product/domain queues
 // register their processors here as well.
 
+import "../lib/env";
 import { disconnectPrismaClient } from "../services/database";
 import { QUEUE_NAMES, createWorker, type Worker } from "../services/queue";
 import { disconnectProbeRedis, processInfraSmoke } from "./jobs/infra-smoke";

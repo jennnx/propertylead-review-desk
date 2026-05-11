@@ -67,6 +67,7 @@ pnpm db:generate   # or rerun `pnpm install`
 | `pnpm build` | `prisma generate` + `next build` |
 | `pnpm worker:build` | Compile worker to `dist/` |
 | `pnpm start` | Next.js production server |
+| `pnpm test` | Vitest test suite |
 | `pnpm worker:start` | Compiled worker from `dist/` |
 | `pnpm db:migrate` | `prisma migrate deploy` |
 | `pnpm db:migrate:dev` | New migration from schema changes (local only) |

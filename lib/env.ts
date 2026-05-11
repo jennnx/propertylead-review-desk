@@ -1,7 +1,7 @@
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
-loadDotenv();
+loadDotenv({ quiet: true });
 
 const envSchema = z.object({
   DATABASE_URL: z
@@ -12,6 +12,9 @@ const envSchema = z.object({
   REDIS_URL: z
     .string({ error: "REDIS_URL is required (e.g. redis://localhost:6379)" })
     .min(1, "REDIS_URL must not be empty"),
+  ANTHROPIC_API_KEY: z
+    .string({ error: "ANTHROPIC_API_KEY is required" })
+    .min(1, "ANTHROPIC_API_KEY must not be empty"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -36,17 +39,4 @@ export function loadEnv(): Env {
   return cached;
 }
 
-export const env: Env = new Proxy({} as Env, {
-  get(_target, prop) {
-    return loadEnv()[prop as keyof Env];
-  },
-  has(_target, prop) {
-    return prop in loadEnv();
-  },
-  ownKeys() {
-    return Reflect.ownKeys(loadEnv());
-  },
-  getOwnPropertyDescriptor(_target, prop) {
-    return Object.getOwnPropertyDescriptor(loadEnv(), prop);
-  },
-});
+export const env: Env = loadEnv();
