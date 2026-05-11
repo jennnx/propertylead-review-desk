@@ -4,6 +4,10 @@ import { z } from "zod";
 loadDotenv({ quiet: true });
 
 const envSchema = z.object({
+  APP_BASE_URL: z.url({
+    error: "APP_BASE_URL is required and must be an absolute http(s) URL",
+    protocol: /^https?$/,
+  }),
   DATABASE_URL: z
     .string({
       error: "DATABASE_URL is required (e.g. postgresql://user:pass@host:5432/db)",

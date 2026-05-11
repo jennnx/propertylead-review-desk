@@ -20,7 +20,7 @@ Using a host Postgres or Redis? Edit `DATABASE_URL` / `REDIS_URL` and drop the m
 ```bash
 git clone <repo> && cd propertylead-review-desk
 cp .env.example .env
-# Set POSTGRES_PASSWORD to a strong random value
+# Set APP_BASE_URL to the public app URL and POSTGRES_PASSWORD to a strong random value
 docker compose up -d --build
 ```
 
