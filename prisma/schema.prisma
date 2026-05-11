@@ -18,3 +18,24 @@ datasource db {
   provider   = "postgresql"
   extensions = [vector]
 }
+
+enum HubSpotWebhookEventProcessingStatus {
+  NEW        @map("new")
+  PROCESSING @map("processing")
+  PROCESSED  @map("processed")
+  FAILED     @map("failed")
+  IGNORED    @map("ignored")
+}
+
+model HubSpotWebhookEvent {
+  id               String                              @id @default(cuid())
+  dedupeKey        String                              @unique
+  rawWebhook       Json
+  normalizedEvent  Json
+  receivedAt       DateTime                            @default(now())
+  processingStatus HubSpotWebhookEventProcessingStatus @default(NEW)
+  processedAt      DateTime?
+
+  @@index([processingStatus, receivedAt])
+  @@map("hubspot_webhook_events")
+}

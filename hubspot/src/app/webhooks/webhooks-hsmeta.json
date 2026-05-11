@@ -7,9 +7,20 @@
       "maxConcurrentRequests": 10
     },
     "subscriptions": {
-      "crmObjects": [],
+      "crmObjects": [
+        {
+          "subscriptionType": "object.creation",
+          "objectType": "contact",
+          "active": true
+        }
+      ],
       "legacyCrmObjects": [],
-      "hubEvents": []
+      "hubEvents": [
+        {
+          "subscriptionType": "conversation.newMessage",
+          "active": true
+        }
+      ]
     }
   }
 }

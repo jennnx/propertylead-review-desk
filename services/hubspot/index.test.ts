@@ -1,9 +1,177 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createHmacSignature } from "@/lib/hmac-signature";
 import { importWithRequiredEnv } from "@/tests/env";
 
+const createMany = vi.fn();
+
+vi.mock("@/services/database", () => ({
+  getPrismaClient: () => ({
+    hubSpotWebhookEvent: {
+      createMany,
+    },
+  }),
+}));
+
 describe("HubSpot Integration service", () => {
+  beforeEach(() => {
+    createMany.mockReset();
+  });
+
+  test("records contact creation HubSpot Webhook Events as new work for the worker", async () => {
+    createMany.mockResolvedValue({ count: 1 });
+    const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+    const timestamp = "1710000000000";
+    const rawEvents = [
+      {
+        appId: 456,
+        eventId: 1001,
+        objectId: 123,
+        objectTypeId: "0-1",
+        occurredAt: 1709999999000,
+        portalId: 789,
+        subscriptionId: 333,
+        subscriptionType: "object.creation",
+      },
+    ];
+    const rawBody = JSON.stringify(rawEvents);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const receipt = await receiveHubSpotWebhookBatch({
+      method: "POST",
+      rawBody,
+      signature,
+      timestamp,
+      webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+      now: new Date(Number(timestamp) + 1_000),
+    });
+
+    expect(receipt.acceptedEventCount).toBe(1);
+    expect(receipt.persistedEventCount).toBe(1);
+    expect(createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          normalizedEvent: {
+            type: "contact.created",
+            hubSpotObjectId: "123",
+            hubSpotPortalId: "789",
+            occurredAt: "2024-03-09T15:59:59.000Z",
+          },
+          processingStatus: "NEW",
+          rawWebhook: rawEvents[0],
+          processedAt: null,
+        }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  test("records conversation new MESSAGE HubSpot Webhook Events as new work for the worker", async () => {
+    createMany.mockResolvedValue({ count: 1 });
+    const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+    const timestamp = "1710000000000";
+    const rawEvents = [
+      {
+        eventId: 1002,
+        messageId: 555,
+        messageType: "MESSAGE",
+        objectId: 321,
+        occurredAt: 1709999999000,
+        portalId: 789,
+        subscriptionId: 334,
+        subscriptionType: "conversation.newMessage",
+      },
+    ];
+    const rawBody = JSON.stringify(rawEvents);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const receipt = await receiveHubSpotWebhookBatch({
+      method: "POST",
+      rawBody,
+      signature,
+      timestamp,
+      webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+      now: new Date(Number(timestamp) + 1_000),
+    });
+
+    expect(receipt.persistedEventCount).toBe(1);
+    expect(createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          normalizedEvent: {
+            type: "conversation.message.received",
+            hubSpotObjectId: "321",
+            hubSpotPortalId: "789",
+            occurredAt: "2024-03-09T15:59:59.000Z",
+            hubSpotMessageId: "555",
+          },
+          processingStatus: "NEW",
+          rawWebhook: rawEvents[0],
+        }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  test("does not record non-target HubSpot Webhook Events", async () => {
+    const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+    const timestamp = "1710000000000";
+    const rawEvents = [
+      {
+        eventId: 1003,
+        objectId: 123,
+        objectTypeId: "0-1",
+        subscriptionType: "object.propertyChange",
+      },
+      {
+        eventId: 1004,
+        objectId: 456,
+        objectTypeId: "0-2",
+        subscriptionType: "object.creation",
+      },
+      {
+        eventId: 1005,
+        messageId: 556,
+        messageType: "COMMENT",
+        objectId: 321,
+        subscriptionType: "conversation.newMessage",
+      },
+    ];
+    const rawBody = JSON.stringify(rawEvents);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const receipt = await receiveHubSpotWebhookBatch({
+      method: "POST",
+      rawBody,
+      signature,
+      timestamp,
+      webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+      now: new Date(Number(timestamp) + 1_000),
+    });
+
+    expect(receipt.acceptedEventCount).toBe(3);
+    expect(receipt.persistedEventCount).toBe(0);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
   test("derives the HubSpot Webhook URL from the app base URL and route path", async () => {
     const { getHubSpotWebhookUrl, HUBSPOT_WEBHOOK_ROUTE_PATH } =
       await importWithRequiredEnv(() => import("./index"));
@@ -56,7 +224,7 @@ describe("HubSpot Integration service", () => {
     expect(receipt.events).toEqual(rawEvents);
     expect(consoleInfo).toHaveBeenCalledWith(
       "Accepted HubSpot Webhook Batch",
-      { eventCount: 2 },
+      { eventCount: 2, persistedEventCount: 0 },
     );
   });
 

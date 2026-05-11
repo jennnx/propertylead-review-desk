@@ -11,7 +11,7 @@ async function readProjectJson(relativePath: string) {
 }
 
 describe("HubSpot developer project configuration", () => {
-  test("commits a static-auth HubSpot Integration without active event subscriptions", async () => {
+  test("commits a static-auth HubSpot Integration with lead and message event subscriptions", async () => {
     const project = await readProjectJson("hsproject.json");
     const app = await readProjectJson("src/app/app-hsmeta.json");
     const webhooks = await readProjectJson(
@@ -32,7 +32,7 @@ describe("HubSpot developer project configuration", () => {
         distribution: "private",
         auth: {
           type: "static",
-          requiredScopes: ["crm.objects.contacts.read"],
+          requiredScopes: ["crm.objects.contacts.read", "conversations.read"],
         },
       },
     });
@@ -48,9 +48,20 @@ describe("HubSpot developer project configuration", () => {
           maxConcurrentRequests: 10,
         },
         subscriptions: {
-          crmObjects: [],
+          crmObjects: [
+            {
+              subscriptionType: "object.creation",
+              objectType: "contact",
+              active: true,
+            },
+          ],
           legacyCrmObjects: [],
-          hubEvents: [],
+          hubEvents: [
+            {
+              subscriptionType: "conversation.newMessage",
+              active: true,
+            },
+          ],
         },
       },
     });

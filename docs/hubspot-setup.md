@@ -42,7 +42,8 @@ The committed configuration in `hubspot/` defines:
 
 - `hubspot/src/app/app-hsmeta.json` — app metadata with static auth.
 - `hubspot/src/app/webhooks/webhooks-hsmeta.json` — webhook target URL and
-  (intentionally empty) subscription configuration.
+  active subscription configuration for contact creation and new conversation
+  messages.
 
 Before uploading, replace the placeholder webhook `targetUrl` in
 `webhooks-hsmeta.json` with the HubSpot Webhook URL derived from your
@@ -81,15 +82,15 @@ When diagnosing signature failures, confirm the two URLs match byte for byte:
 If `APP_BASE_URL` changes (new domain, new tunnel, environment promotion),
 update the HubSpot webhook target URL to match before redeploying.
 
-## 4. Event subscriptions are intentionally deferred
+## 4. Event subscriptions
 
-The committed `subscriptions` arrays in `webhooks-hsmeta.json` are empty on
-purpose. This setup slice proves that authenticated HubSpot Webhook Batches
-can reach the app and parse cleanly — it does not decide which HubSpot events
-should drive the lead review workflow. That decision belongs to a later
-feature slice, where the relevant HubSpot Webhook Event types will be added
-as explicit subscriptions.
+The committed `subscriptions` in `webhooks-hsmeta.json` listen for the
+HubSpot Webhook Events this app currently records as worker-ready ingestion
+state:
 
-Until then, leave the subscription arrays empty. HubSpot will not push live
-events to the app, but the app remains ready to receive and verify any test
-batches sent through the HubSpot developer tooling.
+- `object.creation` for the `contact` CRM object.
+- `conversation.newMessage` for conversation thread messages.
+
+The app records only contact creation events and conversation new message
+events whose `messageType` is `MESSAGE`. Other authenticated HubSpot Webhook
+Events in a HubSpot Webhook Batch are acknowledged but not stored.

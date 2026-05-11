@@ -16,3 +16,4 @@ Add a new ADR when a decision (a) is unlikely to change soon and (b) wouldn't be
 | 0006 | [`infra.smoke` is a permanent diagnostic queue, and `waitUntilFinished` is restricted to verification](0006-permanent-diagnostic-queue.md) | Accepted |
 | 0007 | [pgvector is enabled per-database via a Prisma migration, not by the image](0007-pgvector-via-migration.md) | Accepted |
 | 0008 | [Product code is organized as vertical services and deep slices](0008-vertical-services-and-deep-slices.md) | Accepted |
+| 0009 | [Service data access layers are colocated with owning services](0009-colocated-service-data-access-layers.md) | Accepted |

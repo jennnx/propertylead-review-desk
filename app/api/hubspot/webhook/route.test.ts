@@ -28,10 +28,7 @@ describe("HubSpot webhook route", () => {
       }),
     );
 
-    await expect(response.json()).resolves.toEqual({
-      acceptedEvents: 2,
-      ok: true,
-    });
-    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("");
+    expect(response.status).toBe(204);
   });
 });

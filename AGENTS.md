@@ -8,6 +8,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Package manager is **pnpm**. Before committing, run `pnpm lint`, `pnpm exec tsc --noEmit`, and relevant tests.
 
+# Architecture
+
+We use vertical services and deep slices as the default architecture.
+`docs/adr/0008-vertical-services-and-deep-slices.md` is required reading before changing product or service code.
+
 # Components
 
 This project uses shadcn/ui for components. The `components/ui` folder contains basic UI building blocks, and agents may add more shadcn/ui components there as needed. Refer to the shadcn skill before creating, modifying, or adding components.

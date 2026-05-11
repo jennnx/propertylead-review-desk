@@ -6,7 +6,7 @@ import {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const receipt = await receiveHubSpotWebhookBatch({
+    await receiveHubSpotWebhookBatch({
       method: request.method,
       webhookUrl: getHubSpotWebhookUrl(),
       rawBody: await request.text(),
@@ -14,10 +14,7 @@ export async function POST(request: Request): Promise<Response> {
       timestamp: request.headers.get("x-hubspot-request-timestamp"),
     });
 
-    return Response.json({
-      ok: true,
-      acceptedEvents: receipt.events.length,
-    });
+    return new Response(null, { status: 204 });
   } catch (error) {
     if (error instanceof HubSpotWebhookReceiptError) {
       return Response.json(
