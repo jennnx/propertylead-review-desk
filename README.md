@@ -26,6 +26,8 @@ docker compose up -d --build
 
 nginx is the only service publicly bound. Open :80 (and :443 if you add TLS), point DNS at the VPS. TLS + binding rationale: [ADR 0005](docs/adr/0005-prod-network-binding.md).
 
+To connect the HubSpot Integration to this deployment, follow [the HubSpot setup guide](docs/hubspot-setup.md).
+
 ## Gotchas
 
 - `POSTGRES_PASSWORD` is baked into the postgres volume on first `up`. Changing it later: `docker compose down -v` (destroys data). [ADR 0005](docs/adr/0005-prod-network-binding.md).
