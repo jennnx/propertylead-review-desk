@@ -19,6 +19,9 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z
     .string({ error: "ANTHROPIC_API_KEY is required" })
     .min(1, "ANTHROPIC_API_KEY must not be empty"),
+  HUBSPOT_CLIENT_SECRET: z
+    .string({ error: "HUBSPOT_CLIENT_SECRET is required" })
+    .min(1, "HUBSPOT_CLIENT_SECRET must not be empty"),
 });
 
 export type Env = z.infer<typeof envSchema>;
