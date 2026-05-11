@@ -20,16 +20,28 @@ A sandcastle sequential-reviewer run just finished. All of its work is stacked o
    - The result builds and lints cleanly
    After resolving, `git add` the resolved files and `git commit` (no `-m`; let git compose the default merge-conflict message).
 
-4. Run the project's verification commands per `CLAUDE.md`:
+4. Run the project's verification commands per `AGENTS.md` / `CLAUDE.md`:
    - `pnpm install`
    - `pnpm lint`
    - `pnpm exec tsc --noEmit`
 
 5. If any verification step fails:
    - If the fix is small and obvious, fix it in a follow-up commit on `main` and re-run verification.
-   - If it's not, stop, leave `main` in its current state, and report the failure clearly.
+   - If it's not, stop, leave `main` in its current state, report the failure clearly, and do **not** run cleanup.
 
-6. Check whether any parent PRD is now ready to close.
+6. If the merge and verification are good, clean up the Sandcastle branch and worktree yourself.
+
+   Procedure:
+   - Run `git worktree list --porcelain` and find any linked worktree whose `branch` is `refs/heads/{{BRANCH}}`.
+   - For each matching linked worktree, run `git worktree remove <path>`.
+   - If removal fails only because of generated, disposable local files (for example `.pnpm-store/`, `node_modules/`, `.next/`, `dist/`, `coverage/`, or other clearly reproducible build/cache output), you may run `git worktree remove --force <path>`.
+   - If removal fails for tracked changes, source files, config changes, credentials, or anything you are less than 90% confident is disposable, stop and ask the user for permission before forcing removal.
+   - Run `git worktree prune` to clear stale metadata.
+   - Run `git branch -d {{BRANCH}}`.
+   - If `git branch -d` refuses because the branch is not merged, stop and report; do not use `-D` unless the user explicitly approves it.
+   - Do not print branch or worktree cleanup commands for the user to run. Perform this cleanup yourself and report the result.
+
+7. Check whether any parent PRD is now ready to close.
 
    In this repo, parent PRDs are open GitHub issues with the `prd` label. Their children declare parenthood by including the text `Parent PRD: #<N>` somewhere in the child issue body (see `docs/agents/issue-tracker.md` for the issue-tracker conventions).
 
@@ -45,9 +57,10 @@ A sandcastle sequential-reviewer run just finished. All of its work is stacked o
 # Rules
 
 - **DO NOT push.** No `git push`, no `gh pr create`. Local merge only.
-- **DO NOT delete the source branch `{{BRANCH}}`.** The orchestrator handles cleanup.
+- **DO delete the source branch `{{BRANCH}}` after the merge and verification have succeeded.**
 - **DO NOT amend or rewrite any existing commits.** Only add new commits if needed for conflict resolution or post-merge fixes.
 - **DO NOT close any PRDs yourself**, even if they look ready. The user decides.
+- **DO NOT delete reusable Sandcastle prompt templates** such as `.sandcastle/merge-prompt.md`; cleanup means linked worktrees, stale worktree metadata, and the merged local branch.
 
 # Output
 
@@ -55,21 +68,10 @@ When done, print a short summary:
 - Number of commits merged
 - Whether there were conflicts (and what you did about them)
 - Verification result (pass / which step failed)
+- Cleanup result (worktree removed/pruned, branch deleted, or why cleanup stopped)
 - PRDs ready to close (if any), with the issue numbers and titles
 
-Then finish your output with **clearly-labeled, copy-pastable cleanup command blocks** so the user can run them manually if they want.
-
-Always emit the branch-delete block. Use exactly this format (`{{BRANCH}}` is the literal branch name):
-
-```
---------------------------------------------------------------------
-To delete the merged branch locally (optional), run:
-
-  git branch -d {{BRANCH}}
---------------------------------------------------------------------
-```
-
-If step 6 found any PRDs ready to close, also emit a second block listing one `gh issue close` line per ready PRD:
+If step 7 found any PRDs ready to close, finish with a clearly labeled optional block listing one `gh issue close` line per ready PRD:
 
 ```
 --------------------------------------------------------------------
@@ -82,4 +84,4 @@ PRDs whose child issues are all closed (optional):
 
 If no PRDs are ready to close, omit that second block entirely (do not print an empty one).
 
-Do not run `git branch -d` or `gh issue close` yourself. Leave both for the user.
+Do not run `gh issue close` yourself. Leave PRD closure for the user.
