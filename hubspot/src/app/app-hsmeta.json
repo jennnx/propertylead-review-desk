@@ -1,0 +1,15 @@
+{
+  "uid": "propertylead_review_desk",
+  "type": "app",
+  "config": {
+    "description": "Receives authenticated HubSpot Webhook Batches for PropertyLead Review Desk.",
+    "name": "PropertyLead Review Desk",
+    "distribution": "private",
+    "auth": {
+      "type": "static",
+      "requiredScopes": ["crm.objects.contacts.read"],
+      "optionalScopes": [],
+      "conditionallyRequiredScopes": []
+    }
+  }
+}
