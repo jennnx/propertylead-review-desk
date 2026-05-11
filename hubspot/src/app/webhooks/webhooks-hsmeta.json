@@ -1,0 +1,15 @@
+{
+  "uid": "propertylead_review_desk_webhooks",
+  "type": "webhooks",
+  "config": {
+    "settings": {
+      "targetUrl": "https://app-base-url.example.com/api/hubspot/webhook",
+      "maxConcurrentRequests": 10
+    },
+    "subscriptions": {
+      "crmObjects": [],
+      "legacyCrmObjects": [],
+      "hubEvents": []
+    }
+  }
+}
