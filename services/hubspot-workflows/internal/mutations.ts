@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 
 import { getPrismaClient } from "../../database";
 
+import type { HubSpotWritebackPlan } from "./writeback-plan";
+
 export type HubSpotWorkflowRunRecord = {
   id: string;
 };
@@ -83,6 +85,49 @@ export async function markHubSpotWorkflowRunSucceededWithNoWriteback(
       status: "SUCCEEDED",
       outcome: "NO_WRITEBACK_NEEDED",
       completedAt,
+    },
+  });
+}
+
+export async function markHubSpotWorkflowRunSucceededWithWritebackProposed(
+  id: string,
+  completedAt: Date,
+): Promise<void> {
+  await getPrismaClient().hubSpotWorkflowRun.update({
+    where: {
+      id,
+    },
+    data: {
+      status: "SUCCEEDED",
+      outcome: "WRITEBACK_PROPOSED",
+      completedAt,
+    },
+  });
+}
+
+export type HubSpotWorkflowRunWritebackPlanTrace = {
+  input: unknown;
+  rawOutputs: unknown[];
+  validations: unknown[];
+  acceptedPlan: HubSpotWritebackPlan | null;
+};
+
+export async function recordHubSpotWorkflowRunWritebackPlanTrace(
+  id: string,
+  trace: HubSpotWorkflowRunWritebackPlanTrace,
+): Promise<void> {
+  await getPrismaClient().hubSpotWorkflowRun.update({
+    where: {
+      id,
+    },
+    data: {
+      writebackPlanInput: trace.input as Prisma.InputJsonValue,
+      writebackPlanRawOutputs: trace.rawOutputs as Prisma.InputJsonValue,
+      writebackPlanValidations: trace.validations as Prisma.InputJsonValue,
+      writebackPlan:
+        trace.acceptedPlan === null
+          ? Prisma.DbNull
+          : (trace.acceptedPlan as unknown as Prisma.InputJsonValue),
     },
   });
 }

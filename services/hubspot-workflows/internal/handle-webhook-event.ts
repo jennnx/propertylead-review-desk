@@ -13,8 +13,10 @@ import {
 import {
   markHubSpotWorkflowRunFailed,
   markHubSpotWorkflowRunSucceededWithNoWriteback,
+  markHubSpotWorkflowRunSucceededWithWritebackProposed,
   startHubSpotWorkflowRun,
 } from "./mutations";
+import type { HubSpotWritebackPlan } from "./writeback-plan";
 
 export type HandleHubSpotWebhookEventInput = {
   hubSpotWebhookEventId: string;
@@ -39,12 +41,14 @@ export async function handleHubSpotWebhookEvent({
       rawWebhook,
     });
 
+    let acceptedPlan: HubSpotWritebackPlan | null = null;
     if (workflowEvent.type === "contact.created") {
-      await handleContactCreatedWorkflowEvent({
+      const result = await handleContactCreatedWorkflowEvent({
         runId: run.id,
         workflowEvent,
         hubSpot,
       });
+      acceptedPlan = result.plan;
     } else if (workflowEvent.type === "conversation.message.received") {
       await handleInboundMessageWorkflowEvent({
         runId: run.id,
@@ -53,7 +57,14 @@ export async function handleHubSpotWebhookEvent({
       });
     }
 
-    await markHubSpotWorkflowRunSucceededWithNoWriteback(run.id, new Date());
+    if (acceptedPlan?.kind === "writeback") {
+      await markHubSpotWorkflowRunSucceededWithWritebackProposed(
+        run.id,
+        new Date(),
+      );
+    } else {
+      await markHubSpotWorkflowRunSucceededWithNoWriteback(run.id, new Date());
+    }
   } catch (error) {
     await markHubSpotWorkflowRunFailed(
       run.id,
