@@ -68,6 +68,7 @@ describe("HubSpot queue processing service", () => {
       },
     });
     expect(handleHubSpotWebhookEvent).toHaveBeenCalledWith({
+      hubSpotWebhookEventId: "hubspot-event-to-process",
       normalizedEvent: {
         type: "contact.created",
         hubSpotObjectId: "123",

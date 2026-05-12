@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { env } from "../../../lib/env";
 import { isHmacSignatureValid } from "../../../lib/hmac-signature";
 import {
@@ -7,15 +9,50 @@ import {
 import { enqueueHubSpotWebhookProcessingJobs } from "./processing-queue";
 import {
   createHubSpotWebhookEventDedupeKey,
-  normalizeHubSpotOccurredAt,
-  readStringish,
 } from "./webhook-event-utils";
 import { decodeHubSpotSignatureUri } from "./webhook-signature-uri";
 
 const HUBSPOT_SIGNATURE_MAX_AGE_MS = 5 * 60 * 1000;
 const HUBSPOT_CONTACT_OBJECT_TYPE_ID = "0-1";
+const rawHubSpotWebhookEventSchema = z.object({}).catchall(z.unknown());
+const hubSpotWebhookBatchSchema = z
+  .array(rawHubSpotWebhookEventSchema)
+  .nonempty();
+const stringishSchema = z
+  .union([
+    z.string().min(1),
+    z.number().refine(Number.isSafeInteger).transform(String),
+  ]);
+const nullableStringishSchema = stringishSchema
+  .nullish()
+  .transform((value) => value ?? null)
+  .catch(null);
+const occurredAtSchema = z
+  .number()
+  .refine(Number.isSafeInteger)
+  .transform((value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  })
+  .catch(null);
+const contactCreatedWebhookEventSchema = rawHubSpotWebhookEventSchema.extend({
+  objectId: stringishSchema,
+  objectTypeId: z.literal(HUBSPOT_CONTACT_OBJECT_TYPE_ID),
+  occurredAt: occurredAtSchema,
+  portalId: nullableStringishSchema,
+  subscriptionType: z.literal("object.creation"),
+});
+const conversationMessageWebhookEventSchema =
+  rawHubSpotWebhookEventSchema.extend({
+    messageId: stringishSchema,
+    messageType: z.literal("MESSAGE"),
+    objectId: stringishSchema,
+    occurredAt: occurredAtSchema,
+    portalId: nullableStringishSchema,
+    subscriptionType: z.literal("conversation.newMessage"),
+  });
 
-export type HubSpotWebhookEvent = Record<string, unknown>;
+export type HubSpotWebhookEvent = z.infer<typeof rawHubSpotWebhookEventSchema>;
 
 export type NormalizedHubSpotWebhookEvent = {
   type: "contact.created" | "conversation.message.received";
@@ -102,20 +139,13 @@ type NormalizedTargetHubSpotWebhookEvent = RecordHubSpotWebhookEventInput;
 function normalizeHubSpotWebhookEvent(
   rawWebhook: HubSpotWebhookEvent,
 ): NormalizedTargetHubSpotWebhookEvent | null {
-  const subscriptionType = readStringish(rawWebhook.subscriptionType);
-
-  if (
-    subscriptionType === "object.creation" &&
-    readStringish(rawWebhook.objectTypeId) === HUBSPOT_CONTACT_OBJECT_TYPE_ID
-  ) {
-    const hubSpotObjectId = readStringish(rawWebhook.objectId);
-    if (!hubSpotObjectId) return null;
-
+  const contactCreated = contactCreatedWebhookEventSchema.safeParse(rawWebhook);
+  if (contactCreated.success) {
     const normalizedEvent: NormalizedHubSpotWebhookEvent = {
       type: "contact.created",
-      hubSpotObjectId,
-      hubSpotPortalId: readStringish(rawWebhook.portalId),
-      occurredAt: normalizeHubSpotOccurredAt(rawWebhook.occurredAt),
+      hubSpotObjectId: contactCreated.data.objectId,
+      hubSpotPortalId: contactCreated.data.portalId,
+      occurredAt: contactCreated.data.occurredAt,
     };
 
     return {
@@ -125,20 +155,15 @@ function normalizeHubSpotWebhookEvent(
     };
   }
 
-  if (
-    subscriptionType === "conversation.newMessage" &&
-    readStringish(rawWebhook.messageType) === "MESSAGE"
-  ) {
-    const hubSpotObjectId = readStringish(rawWebhook.objectId);
-    const hubSpotMessageId = readStringish(rawWebhook.messageId);
-    if (!hubSpotObjectId || !hubSpotMessageId) return null;
-
+  const conversationMessage =
+    conversationMessageWebhookEventSchema.safeParse(rawWebhook);
+  if (conversationMessage.success) {
     const normalizedEvent: NormalizedHubSpotWebhookEvent = {
       type: "conversation.message.received",
-      hubSpotObjectId,
-      hubSpotPortalId: readStringish(rawWebhook.portalId),
-      occurredAt: normalizeHubSpotOccurredAt(rawWebhook.occurredAt),
-      hubSpotMessageId,
+      hubSpotObjectId: conversationMessage.data.objectId,
+      hubSpotPortalId: conversationMessage.data.portalId,
+      occurredAt: conversationMessage.data.occurredAt,
+      hubSpotMessageId: conversationMessage.data.messageId,
     };
 
     return {
@@ -205,6 +230,11 @@ function parseHubSpotWebhookBatch(rawBody: string): HubSpotWebhookEvent[] {
     );
   }
 
+  const result = hubSpotWebhookBatchSchema.safeParse(parsed);
+  if (result.success) {
+    return result.data;
+  }
+
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new HubSpotWebhookReceiptError(
       "HubSpot Webhook Batch must be a non-empty array",
@@ -212,18 +242,8 @@ function parseHubSpotWebhookBatch(rawBody: string): HubSpotWebhookEvent[] {
     );
   }
 
-  if (!parsed.every(isRawHubSpotWebhookEvent)) {
-    throw new HubSpotWebhookReceiptError(
-      "HubSpot Webhook Batch must contain only object events",
-      "bad_request",
-    );
-  }
-
-  return parsed;
-}
-
-function isRawHubSpotWebhookEvent(
-  value: unknown,
-): value is HubSpotWebhookEvent {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  throw new HubSpotWebhookReceiptError(
+    "HubSpot Webhook Batch must contain only object events",
+    "bad_request",
+  );
 }

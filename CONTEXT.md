@@ -32,6 +32,8 @@ The `index.ts` file is the public API. Everything under `internal/` is private i
 
 Route files, Server Actions, Route Handlers, scripts, and workers should be thin adapters around service APIs. They parse framework inputs, authorize, call services, revalidate or respond, and then stop. Business policy belongs in services, not in `page.tsx`, UI components, route handlers, scripts, or worker entrypoints.
 
+Use Zod schemas for runtime validation of complicated objects at service boundaries, especially stored JSON, webhook payloads, provider responses, and AI outputs. Prefer schema `parse` or `safeParse` over hand-rolled property checks so validation, type inference, and future object-shape changes stay together.
+
 `lib/` is only for small generic utilities reused everywhere by design, such as `env` and `utils`. It is not where product capabilities should accumulate.
 
 For the full rationale, examples, and Next.js route guidance, see [ADR 0008](docs/adr/0008-vertical-services-and-deep-slices.md).
