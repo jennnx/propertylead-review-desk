@@ -23,7 +23,7 @@ vi.mock("@/services/queue", () => ({
   enqueueQueueJobWithRetries,
 }));
 
-describe("HubSpot Integration service", () => {
+describe("HubSpot Webhooks service", () => {
   beforeEach(() => {
     createMany.mockReset();
     findMany.mockReset();

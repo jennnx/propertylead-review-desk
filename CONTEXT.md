@@ -62,11 +62,24 @@ _Avoid_: Callback URL, inferred URL
 A queued processing unit associated with one stored target HubSpot Webhook Event.
 _Avoid_: Task, generic job
 
+**HubSpot Queue Processing**:
+The service capability that claims stored HubSpot Webhook Processing Jobs,
+loads their canonical HubSpot Webhook Event, delegates HubSpot-native workflow
+handling, and marks the event processed or failed.
+_Avoid_: Worker business logic
+
+**HubSpot Workflows**:
+The HubSpot-native application behavior that inspects HubSpot event payloads,
+fetches additional HubSpot data, supplements it with app-owned data, and
+decides the next HubSpot-facing steps.
+_Avoid_: Generic CRM workflow, lead intake
+
 ## Relationships
 
 - A **HubSpot Webhook Event** may later produce or update a lead review workflow, but ingestion does not decide that mapping.
 - A **HubSpot Webhook Batch** contains one or more **HubSpot Webhook Events**.
 - A **HubSpot Webhook Processing Job** is derived from its **HubSpot Webhook Event**; the event record is the canonical input.
+- **HubSpot Queue Processing** consumes **HubSpot Webhook Processing Jobs** and delegates actual app behavior to **HubSpot Workflows**.
 - A duplicate delivery of an unprocessed stored **HubSpot Webhook Event** may repair or confirm its **HubSpot Webhook Processing Job**.
 - A **HubSpot Integration** receives **HubSpot Webhook Events** from exactly one HubSpot account.
 - A **HubSpot Integration** has exactly one **HubSpot Webhook URL**.

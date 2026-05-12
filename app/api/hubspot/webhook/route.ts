@@ -2,7 +2,7 @@ import {
   HubSpotWebhookReceiptError,
   getHubSpotWebhookUrl,
   receiveHubSpotWebhookBatch,
-} from "@/services/hubspot";
+} from "@/services/hubspot-webhooks";
 
 export async function POST(request: Request): Promise<Response> {
   try {

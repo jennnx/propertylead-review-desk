@@ -17,7 +17,7 @@ write uses Prisma, Kysely, SQL, or another persistence tool underneath.
 Two layouts were considered:
 
 1. Put service-specific database access under the owning service, for example
-   `services/hubspot/internal/mutations.ts`.
+   `services/hubspot-webhooks/internal/mutations.ts`.
 2. Put all database access under the database service, for example
    `services/database/internal/hubspot/mutations.ts`, and expose it as
    `database.hubspot.recordWebhookEvents(...)`.
@@ -64,14 +64,14 @@ Rules:
 This means a HubSpot service write should look like:
 
 ```ts
-// services/hubspot/internal/webhook-receipt.ts
+// services/hubspot-webhooks/internal/webhook-receipt.ts
 await recordHubSpotWebhookEvents(events, receivedAt)
 ```
 
 And the direct Prisma call should live behind:
 
 ```ts
-// services/hubspot/internal/mutations.ts
+// services/hubspot-webhooks/internal/mutations.ts
 getPrismaClient().hubSpotWebhookEvent.createMany(...)
 ```
 

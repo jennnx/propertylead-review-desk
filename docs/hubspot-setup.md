@@ -31,7 +31,7 @@ ${APP_BASE_URL}/api/hubspot/webhook
 ```
 
 The route path is fixed in code (`HUBSPOT_WEBHOOK_ROUTE_PATH` in
-`services/hubspot`). The app does not read proxy headers or rebuild the URL
+`services/hubspot-webhooks`). The app does not read proxy headers or rebuild the URL
 from the incoming request — only `APP_BASE_URL` plus the fixed path is used,
 because HubSpot signs the URL it called and the app must verify against the
 exact same string.
