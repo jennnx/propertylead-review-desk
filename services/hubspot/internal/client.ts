@@ -33,12 +33,22 @@ export type HubSpotConversationThread = {
 
 export type ListHubSpotConversationThreadsInput = {
   associatedContactId: string;
-  limit?: number;
 };
 
 export type HubSpotConversationThreadList = {
   results: HubSpotConversationThread[];
 };
+
+type HubSpotConversationThreadPage = {
+  results: HubSpotConversationThread[];
+  paging?: {
+    next?: {
+      after?: string;
+    };
+  };
+};
+
+const HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE = 100;
 
 export type HubSpotContactProperty = {
   name: string;
@@ -122,16 +132,26 @@ export function createHubSpotClient({
       );
     },
     async listConversationThreads(input) {
-      const searchParams = new URLSearchParams({
-        associatedContactId: input.associatedContactId,
-      });
-      if (input.limit !== undefined) {
-        searchParams.set("limit", String(input.limit));
-      }
-      return request<HubSpotConversationThreadList>(
-        `/conversations/v3/conversations/threads`,
-        { searchParams },
-      );
+      const results: HubSpotConversationThread[] = [];
+      let after: string | undefined;
+
+      do {
+        const searchParams = new URLSearchParams({
+          associatedContactId: input.associatedContactId,
+          limit: String(HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE),
+        });
+        if (after) searchParams.set("after", after);
+
+        const page = await request<HubSpotConversationThreadPage>(
+          `/conversations/v3/conversations/threads`,
+          { searchParams },
+        );
+
+        results.push(...page.results);
+        after = page.paging?.next?.after;
+      } while (after);
+
+      return { results };
     },
     async getConversationThreadMessages(threadId, input = {}) {
       return request<HubSpotConversationThreadMessages>(

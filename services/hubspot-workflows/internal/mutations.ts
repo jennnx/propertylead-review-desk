@@ -91,15 +91,12 @@ export async function recordHubSpotWorkflowRunEnrichmentInputContext(
   id: string,
   enrichmentInputContext: HubSpotWorkflowRunEnrichmentInputContext,
 ): Promise<void> {
-  const input: Prisma.InputJsonValue =
-    enrichmentInputContext as unknown as Prisma.InputJsonValue;
-
   await getPrismaClient().hubSpotWorkflowRun.update({
     where: {
       id,
     },
     data: {
-      enrichmentInputContext: input,
+      enrichmentInputContext,
     },
   });
 }

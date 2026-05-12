@@ -372,6 +372,70 @@ describe("HubSpot workflows service", () => {
     ]);
   });
 
+  test("fails the HubSpot Workflow Run when the triggering thread has no associated contact", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: null },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      handleHubSpotWebhookEvent({
+        hubSpotWebhookEventId: "hubspot-event-1",
+        normalizedEvent: {
+          type: "conversation.message.received",
+          hubSpotObjectId: "thread-1",
+          hubSpotMessageId: "message-123",
+        },
+        rawWebhook: { eventId: 1001 },
+        hubSpot,
+      }),
+    ).rejects.toThrow(/no associated contact/);
+
+    expect(hubSpot.getContact).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "workflow-run-1" },
+      data: {
+        status: "FAILED",
+        outcome: null,
+        failureMessage: expect.stringMatching(/no associated contact/),
+        completedAt: expect.any(Date),
+      },
+    });
+  });
+
+  test("captures an empty current conversation session when the contact has no threads", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: "contact-7" },
+      threadList: [],
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "conversation.message.received",
+        hubSpotObjectId: "thread-1",
+        hubSpotMessageId: "message-123",
+      },
+      rawWebhook: { eventId: 1001 },
+      hubSpot,
+    });
+
+    expect(hubSpot.getConversationThreadMessages).not.toHaveBeenCalled();
+    const firstUpdateCall = update.mock.calls[0]?.[0];
+    expect(
+      firstUpdateCall.data.enrichmentInputContext.currentConversationSession,
+    ).toEqual({ messageLimit: 30, messages: [] });
+  });
+
   test("captures contact-created Enrichment Input Context from current HubSpot contact truth", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
@@ -405,6 +469,9 @@ describe("HubSpot workflows service", () => {
       hubSpot,
     });
 
+    expect(hubSpot.getConversationThread).not.toHaveBeenCalled();
+    expect(hubSpot.listConversationThreads).not.toHaveBeenCalled();
+    expect(hubSpot.getConversationThreadMessages).not.toHaveBeenCalled();
     expect(hubSpot.getContact).toHaveBeenCalledWith("123", {
       properties: expect.arrayContaining([
         "email",
@@ -473,6 +540,9 @@ describe("HubSpot workflows service", () => {
       hubSpot,
     });
 
+    expect(hubSpot.getConversationThread).not.toHaveBeenCalled();
+    expect(hubSpot.listConversationThreads).not.toHaveBeenCalled();
+    expect(hubSpot.getConversationThreadMessages).not.toHaveBeenCalled();
     const firstUpdateCall = update.mock.calls[0]?.[0];
     expect(firstUpdateCall).toMatchObject({
       where: { id: "workflow-run-1" },
