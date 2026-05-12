@@ -5,6 +5,7 @@ import { createRedisConnection } from "./connection";
 export const QUEUE_NAMES = {
   HUBSPOT_WEBHOOK_PROCESS: "hubspot.webhook.process",
   INFRA_SMOKE: "infra.smoke",
+  SOP_INGEST: "sop.ingest",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

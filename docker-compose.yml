@@ -42,6 +42,8 @@ x-app: &app
     APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
     DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-triage_os}
     REDIS_URL: redis://redis:6379
+    VOYAGE_API_KEY: ${VOYAGE_API_KEY:?VOYAGE_API_KEY is required}
+    SOP_STORAGE_DIR: ${SOP_STORAGE_DIR:-/var/lib/triage-os/sops}
 
 services:
   postgres:
@@ -103,6 +105,8 @@ services:
     # when you're SSHed into the VPS.
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      - sop-storage:${SOP_STORAGE_DIR:-/var/lib/triage-os/sops}
     command: ["pnpm", "start"]
     # Container-level healthcheck hits the read-only /api/health endpoint.
     # Node 20+ has a global `fetch`, so no extra HTTP client is required.
@@ -123,6 +127,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    volumes:
+      - sop-storage:${SOP_STORAGE_DIR:-/var/lib/triage-os/sops}
     command: ["pnpm", "worker:start"]
 
   # Public-facing reverse proxy. Terminates HTTP on :80, forwards to the
@@ -144,3 +150,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  sop-storage:

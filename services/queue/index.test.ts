@@ -89,4 +89,10 @@ describe("Queue service", () => {
     expect(queueAdd).toHaveBeenCalledTimes(3);
     expect(queueClose).toHaveBeenCalledTimes(1);
   });
+
+  test("exposes the SOP ingestion queue name", async () => {
+    const { QUEUE_NAMES } = await importWithRequiredEnv(() => import("./index"));
+
+    expect(QUEUE_NAMES.SOP_INGEST).toBe("sop.ingest");
+  });
 });

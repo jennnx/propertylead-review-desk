@@ -9,6 +9,8 @@ describe("environment configuration", () => {
     expect(env).toEqual(REQUIRED_TEST_ENV);
   });
 
+  // Representative canary: if this required-var test fails, import-time Zod
+  // validation is not wired. Do not add one env test per schema field.
   test("requires the Anthropic API key", async () => {
     await expect(
       importWithRequiredEnv(() => import("./env"), {
