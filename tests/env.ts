@@ -8,6 +8,7 @@ export const REQUIRED_TEST_ENV = {
   REDIS_URL: "redis://localhost:6379",
   ANTHROPIC_API_KEY: "test-anthropic-key",
   HUBSPOT_CLIENT_SECRET: "test-hubspot-client-secret",
+  HUBSPOT_ACCESS_TOKEN: "test-hubspot-access-token",
 } satisfies Env;
 
 type TestEnvKey = keyof Env;

@@ -27,6 +27,7 @@ Rules:
 
 - A service exposes its public interface from `services/<name>/index.ts`.
 - Implementation details live in `services/<name>/internal/`.
+- Tracer-bullet code must still preserve this boundary: either start new implementation in `internal/`, or move it there before treating the slice as complete.
 - Callers outside `services/**` must not import service internals.
 - Services should expose business operations, not bags of low-level helpers.
 - App Router pages, Server Actions, Route Handlers, workers, and scripts compose services; they should not own business policy.

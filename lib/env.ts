@@ -22,6 +22,9 @@ const envSchema = z.object({
   HUBSPOT_CLIENT_SECRET: z
     .string({ error: "HUBSPOT_CLIENT_SECRET is required" })
     .min(1, "HUBSPOT_CLIENT_SECRET must not be empty"),
+  HUBSPOT_ACCESS_TOKEN: z
+    .string({ error: "HUBSPOT_ACCESS_TOKEN is required" })
+    .min(1, "HUBSPOT_ACCESS_TOKEN must not be empty"),
 });
 
 export type Env = z.infer<typeof envSchema>;
