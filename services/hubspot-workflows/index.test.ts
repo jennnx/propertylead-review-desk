@@ -118,21 +118,25 @@ describe("HubSpot workflows service", () => {
         id: "workflow-run-1",
       },
       data: {
-        enrichmentInputContext: {
+        enrichmentInputContext: expect.objectContaining({
           source: "hubspot_contact_created",
           hubSpotPortalId: "456",
           occurredAt: "2026-05-12T15:00:00.000Z",
-          contact: {
+          contact: expect.objectContaining({
             id: "123",
-            properties: {
+            properties: expect.objectContaining({
               email: "ada@example.com",
               firstname: "Ada",
               pd_urgency: "high",
               pd_primary_intent: null,
               hs_analytics_source_data_1: "Zillow",
-            },
-          },
-        },
+              lastname: null,
+              phone: null,
+              pd_transaction_side: null,
+              hs_latest_source_data_1: null,
+            }),
+          }),
+        }),
       },
     });
   });
@@ -168,10 +172,9 @@ describe("HubSpot workflows service", () => {
       hubSpot,
     });
 
-    expect(update).toHaveBeenNthCalledWith(1, {
-      where: {
-        id: "workflow-run-1",
-      },
+    const firstUpdateCall = update.mock.calls[0]?.[0];
+    expect(firstUpdateCall).toMatchObject({
+      where: { id: "workflow-run-1" },
       data: {
         enrichmentInputContext: {
           source: "hubspot_contact_created",
@@ -187,6 +190,12 @@ describe("HubSpot workflows service", () => {
         },
       },
     });
+
+    const storedProperties =
+      firstUpdateCall.data.enrichmentInputContext.contact.properties;
+    expect(storedProperties).not.toHaveProperty("hubspot_owner_id");
+    expect(storedProperties).not.toHaveProperty("lifecycle_stage");
+    expect(storedProperties).not.toHaveProperty("made_up_by_portal");
   });
 
   test("marks the HubSpot Workflow Run failed when workflow processing fails", async () => {

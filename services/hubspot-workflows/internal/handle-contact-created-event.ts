@@ -54,9 +54,7 @@ function pickContactProperties(
   const picked: Record<string, string | null> = {};
 
   for (const name of allowedNames) {
-    if (Object.prototype.hasOwnProperty.call(properties, name)) {
-      picked[name] = properties[name] ?? null;
-    }
+    picked[name] = properties[name] ?? null;
   }
 
   return picked;
