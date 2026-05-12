@@ -38,14 +38,26 @@ export async function requestContactCreatedWritebackPlan(input: {
   let acceptedPlan: HubSpotWritebackPlan | null = null;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const response = await claude.messages.create({
-      model: material.model,
-      max_tokens: MAX_TOKENS,
-      system: material.system,
-      tools: [material.tool],
-      tool_choice: { type: "tool", name: HUBSPOT_WRITEBACK_PLAN_TOOL_NAME },
-      messages: [{ role: "user", content: material.userMessage }],
-    });
+    let response: unknown;
+    try {
+      response = await claude.messages.create({
+        model: material.model,
+        max_tokens: MAX_TOKENS,
+        system: material.system,
+        tools: [material.tool],
+        tool_choice: { type: "tool", name: HUBSPOT_WRITEBACK_PLAN_TOOL_NAME },
+        messages: [{ role: "user", content: material.userMessage }],
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "unknown Claude error";
+      rawOutputs.push({ transportError: message });
+      validations.push({
+        ok: false,
+        errors: [`claude transport error: ${message}`],
+      });
+      continue;
+    }
 
     const raw = extractToolUseInput(response);
     rawOutputs.push(raw);

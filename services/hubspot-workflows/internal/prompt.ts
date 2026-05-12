@@ -84,6 +84,7 @@ export function buildContactCreatedWritebackPlanPrompt(input: {
             },
             note: { type: "string", minLength: 1 },
           },
+          additionalProperties: false,
         },
         {
           type: "object",
@@ -92,6 +93,7 @@ export function buildContactCreatedWritebackPlanPrompt(input: {
             kind: { const: "no_writeback" },
             reason: { type: "string", minLength: 1 },
           },
+          additionalProperties: false,
         },
       ],
     },

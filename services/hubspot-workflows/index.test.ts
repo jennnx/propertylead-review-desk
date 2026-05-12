@@ -786,6 +786,51 @@ describe("HubSpot workflows service", () => {
     });
   });
 
+  test("preserves prompt input and a transport-error trace entry when Claude throws", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate
+      .mockRejectedValueOnce(new Error("connect ECONNRESET"))
+      .mockRejectedValueOnce(new Error("connect ECONNRESET"));
+    const hubSpot = stubInboundMessageHubSpot({
+      contact: { id: "123", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      handleHubSpotWebhookEvent({
+        hubSpotWebhookEventId: "hubspot-event-1",
+        normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
+        rawWebhook: { eventId: 1001 },
+        hubSpot,
+      }),
+    ).rejects.toThrow(/valid HubSpot Writeback Plan/);
+
+    expect(messagesCreate).toHaveBeenCalledTimes(2);
+
+    const writebackUpdate = update.mock.calls
+      .map((call) => call[0])
+      .find((arg) => arg?.data?.writebackPlanInput !== undefined);
+    expect(writebackUpdate?.data?.writebackPlanInput).toBeDefined();
+    expect(
+      (writebackUpdate?.data?.writebackPlanRawOutputs as unknown[]).length,
+    ).toBe(2);
+    const validations =
+      writebackUpdate?.data?.writebackPlanValidations as unknown[];
+    expect(
+      validations.every((v) => (v as { ok?: boolean }).ok === false),
+    ).toBe(true);
+    expect(
+      validations.every((v) =>
+        ((v as { errors?: string[] }).errors ?? []).some((msg) =>
+          /transport error/i.test(msg),
+        ),
+      ),
+    ).toBe(true);
+  });
+
   test("marks the HubSpot Workflow Run failed when workflow processing fails", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
