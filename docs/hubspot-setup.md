@@ -23,7 +23,7 @@ process manager). Both are validated by `lib/env.ts` on boot.
 | --- | --- |
 | `APP_BASE_URL` | Externally addressed base URL for this deployment (production origin, tunnel origin, or local origin during direct testing). Must be an absolute `http://` or `https://` URL. |
 | `HUBSPOT_CLIENT_SECRET` | HubSpot developer project client secret. Used to verify HubSpot v3 webhook signatures on every inbound request. |
-| `HUBSPOT_ACCESS_TOKEN` | HubSpot static access token for the developer project's HubSpot Integration. Used at runtime to read contacts, conversation messages, and contact property metadata. The token must have at minimum: `crm.objects.contacts.read`, `crm.schemas.contacts.read`, and `conversations.read`. For one-time portal setup (see §5) the operator's session also needs `crm.schemas.contacts.write`. |
+| `HUBSPOT_ACCESS_TOKEN` | HubSpot static access token for the developer project's HubSpot Integration. Used at runtime to call the HubSpot operations exposed by `services/hubspot`. The runtime scopes the app currently uses are `crm.objects.contacts.read`, `crm.schemas.contacts.read`, and `conversations.read`; data-write scopes such as `crm.objects.contacts.write` and `crm.objects.notes.write` will be added when runtime HubSpot writeback lands (out of scope for PRD #18). Schema-mutation scope (`crm.schemas.contacts.write`) is **never** needed at runtime — it is only needed during the operator's one-time setup session (see §5), because the static Writable HubSpot Property Catalog is curated by humans, not invented by the running app. |
 
 The HubSpot Webhook URL is derived by the app as:
 
@@ -138,10 +138,11 @@ through this workflow yourself — do not hand the checklist back to them.
 - Confirm with the operator that `HUBSPOT_ACCESS_TOKEN` is set in your shell
   and points at the intended HubSpot portal. If it is not set, ask for it
   before proceeding.
-- The token must include `crm.schemas.contacts.write` for setup, in addition
-  to the runtime scopes listed in §1 of this document. If `POST` calls below
-  return 403, that is the likely cause — surface it to the operator and ask
-  them to regenerate the token with the right scopes.
+- The token must include `crm.schemas.contacts.write` for this setup session,
+  in addition to the runtime scopes listed in §1 of this document. That
+  schema-write scope is **only** needed here, never at runtime. If `POST`
+  calls below return 403, that is the likely cause — surface it to the
+  operator and ask them to regenerate the token with the right scopes.
 
 **2. Read the catalog.**
 
