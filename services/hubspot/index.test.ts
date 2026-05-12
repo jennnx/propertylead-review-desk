@@ -91,6 +91,22 @@ describe("HubSpot service", () => {
     });
   });
 
+  test("returns no messages and skips HubSpot when limit is zero", async () => {
+    const fetchHubSpot = vi.fn();
+
+    const { createHubSpotClient } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const client = createHubSpotClient({ fetch: fetchHubSpot });
+    const thread = await client.getConversationThreadMessages("thread-123", {
+      limit: 0,
+    });
+
+    expect(thread).toEqual({ results: [] });
+    expect(fetchHubSpot).not.toHaveBeenCalled();
+  });
+
   test("returns the latest N messages from a single page that holds more than the limit", async () => {
     const fetchHubSpot = vi.fn().mockResolvedValue(
       new Response(

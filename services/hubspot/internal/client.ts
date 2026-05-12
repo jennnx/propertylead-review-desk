@@ -167,6 +167,7 @@ export function createHubSpotClient({
     async getConversationThreadMessages(threadId, input = {}) {
       const targetLimit =
         input.limit ?? HUBSPOT_CONVERSATION_THREAD_MESSAGES_DEFAULT_LIMIT;
+      if (targetLimit <= 0) return { results: [] };
       let buffer: unknown[] = [];
       let after: string | undefined;
 
