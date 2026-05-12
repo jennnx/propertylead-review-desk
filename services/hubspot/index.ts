@@ -7,8 +7,11 @@ export {
   type HubSpotClient,
   type HubSpotContact,
   type HubSpotContactProperty,
+  type HubSpotConversationThread,
+  type HubSpotConversationThreadList,
   type HubSpotConversationThreadMessages,
   type HubSpotFetch,
+  type ListHubSpotConversationThreadsInput,
 } from "./internal/client";
 export {
   HUBSPOT_PROPERTYDESK_PROPERTY_GROUP_LABEL,

@@ -6,15 +6,46 @@ export type HubSpotWorkflowRunRecord = {
   id: string;
 };
 
-export type HubSpotWorkflowRunEnrichmentInputContext = {
-  source: string;
+export type HubSpotWorkflowRunContactSnapshot = {
+  id: string;
+  properties: Record<string, string | null>;
+};
+
+export type HubSpotWorkflowRunConversationMessage = {
+  id: string;
+  threadId: string;
+  actorId: string | null;
+  direction: string | null;
+  text: string | null;
+  richText: string | null;
+  createdAt: string | null;
+  truncationStatus: string | null;
+};
+
+export type HubSpotWorkflowRunCurrentConversationSession = {
+  messageLimit: number;
+  messages: HubSpotWorkflowRunConversationMessage[];
+};
+
+export type HubSpotWorkflowRunContactCreatedEnrichmentInputContext = {
+  source: "hubspot_contact_created";
   hubSpotPortalId: string | null;
   occurredAt: string | null;
-  contact: {
-    id: string;
-    properties: Record<string, string | null>;
-  };
+  contact: HubSpotWorkflowRunContactSnapshot;
 };
+
+export type HubSpotWorkflowRunInboundMessageEnrichmentInputContext = {
+  source: "hubspot_inbound_message";
+  hubSpotPortalId: string | null;
+  occurredAt: string | null;
+  triggeringMessageId: string;
+  contact: HubSpotWorkflowRunContactSnapshot;
+  currentConversationSession: HubSpotWorkflowRunCurrentConversationSession;
+};
+
+export type HubSpotWorkflowRunEnrichmentInputContext =
+  | HubSpotWorkflowRunContactCreatedEnrichmentInputContext
+  | HubSpotWorkflowRunInboundMessageEnrichmentInputContext;
 
 export async function startHubSpotWorkflowRun(
   hubSpotWebhookEventId: string,
@@ -60,7 +91,8 @@ export async function recordHubSpotWorkflowRunEnrichmentInputContext(
   id: string,
   enrichmentInputContext: HubSpotWorkflowRunEnrichmentInputContext,
 ): Promise<void> {
-  const input: Prisma.InputJsonValue = enrichmentInputContext;
+  const input: Prisma.InputJsonValue =
+    enrichmentInputContext as unknown as Prisma.InputJsonValue;
 
   await getPrismaClient().hubSpotWorkflowRun.update({
     where: {

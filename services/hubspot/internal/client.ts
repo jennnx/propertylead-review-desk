@@ -26,6 +26,20 @@ export type HubSpotConversationThreadMessages = {
   results: unknown[];
 };
 
+export type HubSpotConversationThread = {
+  id: string;
+  associatedContactId: string | null;
+};
+
+export type ListHubSpotConversationThreadsInput = {
+  associatedContactId: string;
+  limit?: number;
+};
+
+export type HubSpotConversationThreadList = {
+  results: HubSpotConversationThread[];
+};
+
 export type HubSpotContactProperty = {
   name: string;
   label?: string;
@@ -45,6 +59,12 @@ export type HubSpotClient = {
     contactId: string,
     input: GetHubSpotContactInput,
   ) => Promise<HubSpotContact>;
+  getConversationThread: (
+    threadId: string,
+  ) => Promise<HubSpotConversationThread>;
+  listConversationThreads: (
+    input: ListHubSpotConversationThreadsInput,
+  ) => Promise<HubSpotConversationThreadList>;
   getConversationThreadMessages: (
     threadId: string,
     input?: GetHubSpotConversationThreadMessagesInput,
@@ -94,6 +114,23 @@ export function createHubSpotClient({
             properties: input.properties.join(","),
           }),
         },
+      );
+    },
+    async getConversationThread(threadId) {
+      return request<HubSpotConversationThread>(
+        `/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}`,
+      );
+    },
+    async listConversationThreads(input) {
+      const searchParams = new URLSearchParams({
+        associatedContactId: input.associatedContactId,
+      });
+      if (input.limit !== undefined) {
+        searchParams.set("limit", String(input.limit));
+      }
+      return request<HubSpotConversationThreadList>(
+        `/conversations/v3/conversations/threads`,
+        { searchParams },
       );
     },
     async getConversationThreadMessages(threadId, input = {}) {
