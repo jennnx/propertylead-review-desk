@@ -1,4 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+
+import { importWithRequiredEnv } from "@/tests/env";
 
 const upsert = vi.fn();
 const update = vi.fn();
@@ -21,13 +24,16 @@ describe("HubSpot workflows service", () => {
   test("records a successful HubSpot Workflow Run for a target HubSpot Webhook Event", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const { handleHubSpotWebhookEvent } = await import("./index");
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
 
     await handleHubSpotWebhookEvent({
       hubSpotWebhookEventId: "hubspot-event-1",
       normalizedEvent: {
-        type: "contact.created",
+        type: "conversation.message.received",
         hubSpotObjectId: "123",
+        hubSpotMessageId: "message-123",
       },
       rawWebhook: {
         eventId: 1001,
@@ -45,6 +51,7 @@ describe("HubSpot workflows service", () => {
       update: {
         status: "IN_PROGRESS",
         outcome: null,
+        enrichmentInputContext: Prisma.DbNull,
         failureMessage: null,
         completedAt: null,
       },
@@ -64,10 +71,130 @@ describe("HubSpot workflows service", () => {
     });
   });
 
+  test("captures contact-created Enrichment Input Context from current HubSpot contact truth", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    const hubSpot = {
+      getContact: vi.fn().mockResolvedValue({
+        id: "123",
+        properties: {
+          email: "ada@example.com",
+          firstname: "Ada",
+          pd_urgency: "high",
+          pd_primary_intent: null,
+          hs_analytics_source_data_1: "Zillow",
+        },
+      }),
+    };
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "contact.created",
+        hubSpotObjectId: "123",
+        hubSpotPortalId: "456",
+        occurredAt: "2026-05-12T15:00:00.000Z",
+      },
+      rawWebhook: {
+        eventId: 1001,
+      },
+      hubSpot,
+    });
+
+    expect(hubSpot.getContact).toHaveBeenCalledWith("123", {
+      properties: expect.arrayContaining([
+        "email",
+        "firstname",
+        "pd_urgency",
+        "pd_primary_intent",
+        "hs_analytics_source_data_1",
+      ]),
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: {
+        id: "workflow-run-1",
+      },
+      data: {
+        enrichmentInputContext: {
+          source: "hubspot_contact_created",
+          hubSpotPortalId: "456",
+          occurredAt: "2026-05-12T15:00:00.000Z",
+          contact: {
+            id: "123",
+            properties: {
+              email: "ada@example.com",
+              firstname: "Ada",
+              pd_urgency: "high",
+              pd_primary_intent: null,
+              hs_analytics_source_data_1: "Zillow",
+            },
+          },
+        },
+      },
+    });
+  });
+
+  test("stores contact-created Enrichment Input Context as bounded operational trace, not current contact state", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    const hubSpot = {
+      getContact: vi.fn().mockResolvedValue({
+        id: "123",
+        properties: {
+          email: "ada@example.com",
+          pd_urgency: "high",
+          hubspot_owner_id: "owner-1",
+          lifecycle_stage: "lead",
+          made_up_by_portal: "should not be stored",
+        },
+      }),
+    };
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "contact.created",
+        hubSpotObjectId: "123",
+      },
+      rawWebhook: {
+        eventId: 1001,
+      },
+      hubSpot,
+    });
+
+    expect(update).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: "workflow-run-1",
+      },
+      data: {
+        enrichmentInputContext: {
+          source: "hubspot_contact_created",
+          hubSpotPortalId: null,
+          occurredAt: null,
+          contact: {
+            id: "123",
+            properties: {
+              email: "ada@example.com",
+              pd_urgency: "high",
+            },
+          },
+        },
+      },
+    });
+  });
+
   test("marks the HubSpot Workflow Run failed when workflow processing fails", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const { handleHubSpotWebhookEvent } = await import("./index");
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
 
     await expect(
       handleHubSpotWebhookEvent({

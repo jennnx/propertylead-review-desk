@@ -1,7 +1,19 @@
+import { Prisma } from "@prisma/client";
+
 import { getPrismaClient } from "../../database";
 
 export type HubSpotWorkflowRunRecord = {
   id: string;
+};
+
+export type HubSpotWorkflowRunEnrichmentInputContext = {
+  source: string;
+  hubSpotPortalId: string | null;
+  occurredAt: string | null;
+  contact: {
+    id: string;
+    properties: Record<string, string | null>;
+  };
 };
 
 export async function startHubSpotWorkflowRun(
@@ -18,6 +30,7 @@ export async function startHubSpotWorkflowRun(
     update: {
       status: "IN_PROGRESS",
       outcome: null,
+      enrichmentInputContext: Prisma.DbNull,
       failureMessage: null,
       completedAt: null,
     },
@@ -39,6 +52,22 @@ export async function markHubSpotWorkflowRunSucceededWithNoWriteback(
       status: "SUCCEEDED",
       outcome: "NO_WRITEBACK_NEEDED",
       completedAt,
+    },
+  });
+}
+
+export async function recordHubSpotWorkflowRunEnrichmentInputContext(
+  id: string,
+  enrichmentInputContext: HubSpotWorkflowRunEnrichmentInputContext,
+): Promise<void> {
+  const input: Prisma.InputJsonValue = enrichmentInputContext;
+
+  await getPrismaClient().hubSpotWorkflowRun.update({
+    where: {
+      id,
+    },
+    data: {
+      enrichmentInputContext: input,
     },
   });
 }

@@ -57,6 +57,7 @@ model HubSpotWorkflowRun {
   hubSpotWebhookEvent   HubSpotWebhookEvent       @relation(fields: [hubSpotWebhookEventId], references: [id], onDelete: Cascade)
   status                HubSpotWorkflowRunStatus  @default(IN_PROGRESS)
   outcome               HubSpotWorkflowRunOutcome?
+  enrichmentInputContext Json?
   failureMessage        String?
   completedAt           DateTime?
   createdAt             DateTime                  @default(now())

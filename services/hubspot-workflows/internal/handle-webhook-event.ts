@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 import {
+  hubSpot as defaultHubSpot,
+  type HubSpotClient,
+} from "@/services/hubspot";
+
+import { handleContactCreatedWorkflowEvent } from "./handle-contact-created-event";
+import {
   markHubSpotWorkflowRunFailed,
   markHubSpotWorkflowRunSucceededWithNoWriteback,
   startHubSpotWorkflowRun,
@@ -10,12 +16,14 @@ export type HandleHubSpotWebhookEventInput = {
   hubSpotWebhookEventId: string;
   normalizedEvent: unknown;
   rawWebhook: unknown;
+  hubSpot?: Pick<HubSpotClient, "getContact">;
 };
 
 export async function handleHubSpotWebhookEvent({
   hubSpotWebhookEventId,
   normalizedEvent,
   rawWebhook,
+  hubSpot = defaultHubSpot,
 }: HandleHubSpotWebhookEventInput): Promise<void> {
   const run = await startHubSpotWorkflowRun(hubSpotWebhookEventId);
 
@@ -26,6 +34,14 @@ export async function handleHubSpotWebhookEvent({
       normalizedEvent: workflowEvent,
       rawWebhook,
     });
+
+    if (workflowEvent.type === "contact.created") {
+      await handleContactCreatedWorkflowEvent({
+        runId: run.id,
+        workflowEvent,
+        hubSpot,
+      });
+    }
 
     await markHubSpotWorkflowRunSucceededWithNoWriteback(run.id, new Date());
   } catch (error) {
