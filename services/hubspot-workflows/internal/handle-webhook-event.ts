@@ -59,14 +59,12 @@ type HubSpotWorkflowEvent = z.infer<typeof hubSpotWorkflowEventSchema>;
 function parseHubSpotWorkflowEvent(
   normalizedEvent: unknown,
 ): HubSpotWorkflowEvent {
-  try {
-    return hubSpotWorkflowEventSchema.parse(normalizedEvent);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new Error(getUnsupportedWorkflowEventMessage(normalizedEvent));
-    }
-    throw error;
+  const result = hubSpotWorkflowEventSchema.safeParse(normalizedEvent);
+  if (result.success) {
+    return result.data;
   }
+
+  throw new Error(getUnsupportedWorkflowEventMessage(normalizedEvent));
 }
 
 function getUnsupportedWorkflowEventMessage(normalizedEvent: unknown): string {
