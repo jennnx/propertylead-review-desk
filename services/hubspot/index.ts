@@ -20,9 +20,9 @@ export {
   type WritableHubSpotPropertyType,
 } from "./internal/catalog";
 export {
-  setupWritableHubSpotPropertyCatalog,
-  type HubSpotPropertyCatalogSetupClient,
-  type HubSpotPropertyCatalogSetupFailure,
-  type SetupWritableHubSpotPropertyCatalogInput,
-  type SetupWritableHubSpotPropertyCatalogResult,
-} from "./internal/setup";
+  verifyWritableHubSpotPropertyCatalog,
+  type HubSpotPropertyCatalogVerifyClient,
+  type HubSpotPropertyCatalogVerifyFailure,
+  type VerifyWritableHubSpotPropertyCatalogInput,
+  type VerifyWritableHubSpotPropertyCatalogResult,
+} from "./internal/verify";

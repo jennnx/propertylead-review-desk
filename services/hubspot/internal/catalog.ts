@@ -29,18 +29,13 @@ const standardContactProperties = [
   textProperty("state", "State/region", "verify"),
   textProperty("zip", "Postal code", "verify"),
   textProperty("country", "Country/region", "verify"),
-  enumerationProperty("hs_timezone", "Time zone", "verify", []),
-  enumerationProperty(
-    "hs_analytics_source",
-    "Original Traffic Source",
-    "verify",
-    [],
-  ),
-  enumerationProperty("hs_latest_source", "Latest Traffic Source", "verify", []),
+  verifyEnumerationProperty("hs_timezone", "Time zone"),
+  verifyEnumerationProperty("hs_analytics_source", "Original Traffic Source"),
+  verifyEnumerationProperty("hs_latest_source", "Latest Traffic Source"),
 ] satisfies WritableHubSpotPropertyCatalogEntry[];
 
 const propertyDeskProperties = [
-  enumerationProperty("pd_transaction_side", "PropertyDesk Transaction Side", "create", [
+  enumerationProperty("pd_transaction_side", "PropertyDesk Transaction Side", [
     "buyer",
     "seller",
     "buyer_and_seller",
@@ -48,7 +43,7 @@ const propertyDeskProperties = [
     "investor",
     "unknown",
   ]),
-  enumerationProperty("pd_primary_intent", "PropertyDesk Primary Intent", "create", [
+  enumerationProperty("pd_primary_intent", "PropertyDesk Primary Intent", [
     "request_showing",
     "buy_search",
     "sell_inquiry",
@@ -59,7 +54,7 @@ const propertyDeskProperties = [
     "general_question",
     "unknown",
   ]),
-  enumerationProperty("pd_urgency", "PropertyDesk Urgency", "create", [
+  enumerationProperty("pd_urgency", "PropertyDesk Urgency", [
     "low",
     "normal",
     "high",
@@ -81,7 +76,6 @@ const propertyDeskProperties = [
   enumerationProperty(
     "pd_preferred_contact_method",
     "PropertyDesk Preferred Contact Method",
-    "create",
     ["call", "text", "email", "no_preference", "unknown"],
   ),
   boolProperty("pd_relocation", "PropertyDesk Relocation"),
@@ -106,7 +100,7 @@ const propertyDeskProperties = [
   textProperty("pd_desired_area", "PropertyDesk Desired Area", "create"),
   numberProperty("pd_budget_min", "PropertyDesk Budget Min"),
   numberProperty("pd_budget_max", "PropertyDesk Budget Max"),
-  enumerationProperty("pd_financing_status", "PropertyDesk Financing Status", "create", [
+  enumerationProperty("pd_financing_status", "PropertyDesk Financing Status", [
     "cash",
     "preapproved",
     "prequalified",
@@ -115,7 +109,7 @@ const propertyDeskProperties = [
     "not_applicable",
   ]),
   boolProperty("pd_home_to_sell", "PropertyDesk Home To Sell"),
-  enumerationProperty("pd_buy_readiness", "PropertyDesk Buy Readiness", "create", [
+  enumerationProperty("pd_buy_readiness", "PropertyDesk Buy Readiness", [
     "browsing",
     "wants_showing",
     "actively_touring",
@@ -124,7 +118,7 @@ const propertyDeskProperties = [
     "not_buying",
     "unknown",
   ]),
-  enumerationProperty("pd_occupancy_intent", "PropertyDesk Occupancy Intent", "create", [
+  enumerationProperty("pd_occupancy_intent", "PropertyDesk Occupancy Intent", [
     "primary_residence",
     "investment_property",
     "vacation_home",
@@ -134,7 +128,7 @@ const propertyDeskProperties = [
   numberProperty("pd_bedrooms_min", "PropertyDesk Bedrooms Min"),
   numberProperty("pd_bathrooms_min", "PropertyDesk Bathrooms Min"),
   textProperty("pd_property_address", "PropertyDesk Property Address", "create"),
-  enumerationProperty("pd_property_type", "PropertyDesk Property Type", "create", [
+  enumerationProperty("pd_property_type", "PropertyDesk Property Type", [
     "single_family",
     "condo",
     "townhome",
@@ -153,7 +147,7 @@ const propertyDeskProperties = [
     fieldType: "textarea",
     setup: "create",
   },
-  enumerationProperty("pd_timeframe_bucket", "PropertyDesk Timeframe Bucket", "create", [
+  enumerationProperty("pd_timeframe_bucket", "PropertyDesk Timeframe Bucket", [
     "immediate",
     "within_30_days",
     "one_to_three_months",
@@ -161,7 +155,7 @@ const propertyDeskProperties = [
     "six_plus_months",
     "unknown",
   ]),
-  enumerationProperty("pd_sale_readiness", "PropertyDesk Sale Readiness", "create", [
+  enumerationProperty("pd_sale_readiness", "PropertyDesk Sale Readiness", [
     "exploring_value",
     "considering_sale",
     "ready_to_list",
@@ -170,7 +164,7 @@ const propertyDeskProperties = [
     "unknown",
   ]),
   boolProperty("pd_has_existing_agent", "PropertyDesk Has Existing Agent"),
-  enumerationProperty("pd_seller_motivation", "PropertyDesk Seller Motivation", "create", [
+  enumerationProperty("pd_seller_motivation", "PropertyDesk Seller Motivation", [
     "relocation",
     "upsizing",
     "downsizing",
@@ -185,7 +179,6 @@ const propertyDeskProperties = [
   enumerationProperty(
     "pd_seller_property_condition",
     "PropertyDesk Seller Property Condition",
-    "create",
     ["excellent", "good", "needs_minor_work", "needs_major_work", "teardown", "unknown"],
   ),
 ] satisfies WritableHubSpotPropertyCatalogEntry[];
@@ -265,7 +258,6 @@ function dateProperty(
 function enumerationProperty(
   name: string,
   label: string,
-  setup: WritableHubSpotPropertySetup,
   options: string[],
 ): WritableHubSpotPropertyCatalogEntry {
   return {
@@ -273,7 +265,20 @@ function enumerationProperty(
     label,
     type: "enumeration",
     fieldType: "select",
-    setup,
+    setup: "create",
     options,
+  };
+}
+
+function verifyEnumerationProperty(
+  name: string,
+  label: string,
+): WritableHubSpotPropertyCatalogEntry {
+  return {
+    name,
+    label,
+    type: "enumeration",
+    fieldType: "select",
+    setup: "verify",
   };
 }
