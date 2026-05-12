@@ -47,7 +47,7 @@ describe("HubSpot service", () => {
     );
   });
 
-  test("reads a HubSpot Conversations thread with a bounded message limit", async () => {
+  test("returns all messages of a single-page thread shorter than the requested limit", async () => {
     const fetchHubSpot = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -57,12 +57,14 @@ describe("HubSpot service", () => {
               text: "Can I tour this weekend?",
               truncationStatus: "NOT_TRUNCATED",
             },
+            {
+              id: "message-2",
+              text: "Sure — Saturday at 2?",
+              truncationStatus: "NOT_TRUNCATED",
+            },
           ],
         }),
-        {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        },
+        { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
 
@@ -73,24 +75,97 @@ describe("HubSpot service", () => {
     const client = createHubSpotClient({ fetch: fetchHubSpot });
     const thread = await client.getConversationThreadMessages("thread-123");
 
-    expect(thread).toEqual({
-      results: [
-        {
-          id: "message-1",
-          text: "Can I tour this weekend?",
-          truncationStatus: "NOT_TRUNCATED",
-        },
-      ],
-    });
-    expect(fetchHubSpot).toHaveBeenCalledWith(
-      "https://api.hubapi.com/conversations/v3/conversations/threads/thread-123/messages?limit=30",
-      {
-        headers: {
-          authorization: `Bearer ${REQUIRED_TEST_ENV.HUBSPOT_ACCESS_TOKEN}`,
-          accept: "application/json",
-        },
-      },
+    expect(thread.results.map((m) => (m as { id: string }).id)).toEqual([
+      "message-1",
+      "message-2",
+    ]);
+    expect(fetchHubSpot).toHaveBeenCalledTimes(1);
+    expect(fetchHubSpot.mock.calls[0][0]).toBe(
+      "https://api.hubapi.com/conversations/v3/conversations/threads/thread-123/messages?limit=100",
     );
+    expect(fetchHubSpot.mock.calls[0][1]).toEqual({
+      headers: {
+        authorization: `Bearer ${REQUIRED_TEST_ENV.HUBSPOT_ACCESS_TOKEN}`,
+        accept: "application/json",
+      },
+    });
+  });
+
+  test("returns the latest N messages from a single page that holds more than the limit", async () => {
+    const fetchHubSpot = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          results: [
+            { id: "message-1" },
+            { id: "message-2" },
+            { id: "message-3" },
+            { id: "message-4" },
+            { id: "message-5" },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const { createHubSpotClient } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const client = createHubSpotClient({ fetch: fetchHubSpot });
+    const thread = await client.getConversationThreadMessages("thread-123", {
+      limit: 2,
+    });
+
+    expect(thread.results.map((m) => (m as { id: string }).id)).toEqual([
+      "message-4",
+      "message-5",
+    ]);
+    expect(fetchHubSpot).toHaveBeenCalledTimes(1);
+  });
+
+  test("returns the latest N messages across paged thread responses, oldest-first within the slice", async () => {
+    const message = (id: number) => ({
+      id: `message-${id}`,
+      text: `m${id}`,
+      truncationStatus: "NOT_TRUNCATED",
+    });
+
+    const fetchHubSpot = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [message(1), message(2), message(3), message(4)],
+            paging: { next: { after: "cursor-2" } },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [message(5), message(6), message(7)],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+
+    const { createHubSpotClient } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const client = createHubSpotClient({ fetch: fetchHubSpot });
+    const thread = await client.getConversationThreadMessages("thread-123", {
+      limit: 3,
+    });
+
+    expect(thread.results.map((m) => (m as { id: string }).id)).toEqual([
+      "message-5",
+      "message-6",
+      "message-7",
+    ]);
+    expect(fetchHubSpot).toHaveBeenCalledTimes(2);
+    expect(fetchHubSpot.mock.calls[1][0]).toContain("after=cursor-2");
   });
 
   test("lists HubSpot Conversations threads for a contact across paged responses", async () => {

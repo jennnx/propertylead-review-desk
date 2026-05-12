@@ -48,7 +48,18 @@ type HubSpotConversationThreadPage = {
   };
 };
 
+type HubSpotConversationThreadMessagesPage = {
+  results: unknown[];
+  paging?: {
+    next?: {
+      after?: string;
+    };
+  };
+};
+
 const HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE = 100;
+const HUBSPOT_CONVERSATION_THREAD_MESSAGES_PAGE_SIZE = 100;
+const HUBSPOT_CONVERSATION_THREAD_MESSAGES_DEFAULT_LIMIT = 30;
 
 export type HubSpotContactProperty = {
   name: string;
@@ -154,16 +165,32 @@ export function createHubSpotClient({
       return { results };
     },
     async getConversationThreadMessages(threadId, input = {}) {
-      return request<HubSpotConversationThreadMessages>(
-        `/conversations/v3/conversations/threads/${encodeURIComponent(
-          threadId,
-        )}/messages`,
-        {
-          searchParams: new URLSearchParams({
-            limit: String(input.limit ?? 30),
-          }),
-        },
-      );
+      const targetLimit =
+        input.limit ?? HUBSPOT_CONVERSATION_THREAD_MESSAGES_DEFAULT_LIMIT;
+      let buffer: unknown[] = [];
+      let after: string | undefined;
+
+      do {
+        const searchParams = new URLSearchParams({
+          limit: String(HUBSPOT_CONVERSATION_THREAD_MESSAGES_PAGE_SIZE),
+        });
+        if (after) searchParams.set("after", after);
+
+        const page = await request<HubSpotConversationThreadMessagesPage>(
+          `/conversations/v3/conversations/threads/${encodeURIComponent(
+            threadId,
+          )}/messages`,
+          { searchParams },
+        );
+
+        buffer.push(...page.results);
+        if (buffer.length > targetLimit) {
+          buffer = buffer.slice(-targetLimit);
+        }
+        after = page.paging?.next?.after;
+      } while (after);
+
+      return { results: buffer };
     },
     async getContactProperty(name) {
       const response = await fetchHubSpot(
