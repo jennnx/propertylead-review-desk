@@ -17,3 +17,5 @@ Add a new ADR when a decision (a) is unlikely to change soon and (b) wouldn't be
 | 0007 | [pgvector is enabled per-database via a Prisma migration, not by the image](0007-pgvector-via-migration.md) | Accepted |
 | 0008 | [Product code is organized as vertical services and deep slices](0008-vertical-services-and-deep-slices.md) | Accepted |
 | 0009 | [Service data access layers are colocated with owning services](0009-colocated-service-data-access-layers.md) | Accepted |
+| 0010 | [Store enrichment workflow trace, not local current lead state](0010-operational-trace-without-local-enrichment-state.md) | Accepted |
+| 0011 | [First Writable HubSpot Property Catalog](0011-first-writable-hubspot-property-catalog.md) | Accepted |
