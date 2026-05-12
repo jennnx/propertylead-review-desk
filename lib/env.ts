@@ -1,4 +1,5 @@
 import { config as loadDotenv } from "dotenv";
+import path from "node:path";
 import { z } from "zod";
 
 loadDotenv({ quiet: true });
@@ -19,6 +20,13 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z
     .string({ error: "ANTHROPIC_API_KEY is required" })
     .min(1, "ANTHROPIC_API_KEY must not be empty"),
+  VOYAGE_API_KEY: z
+    .string({ error: "VOYAGE_API_KEY is required" })
+    .min(1, "VOYAGE_API_KEY must not be empty"),
+  SOP_STORAGE_DIR: z
+    .string({ error: "SOP_STORAGE_DIR is required" })
+    .min(1, "SOP_STORAGE_DIR must not be empty")
+    .refine(path.isAbsolute, "SOP_STORAGE_DIR must be an absolute path"),
   HUBSPOT_CLIENT_SECRET: z
     .string({ error: "HUBSPOT_CLIENT_SECRET is required" })
     .min(1, "HUBSPOT_CLIENT_SECRET must not be empty"),

@@ -8,6 +8,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Package manager is **pnpm**. Before committing, run `pnpm lint`, `pnpm exec tsc --noEmit`, and relevant tests.
 
+# Testing
+
+For environment schema tests, do not add one test per env var. Keep one representative required-variable test as a canary that import-time Zod validation is wired. Add more env tests only when there is behavior beyond ordinary schema validation.
+
 # Architecture
 
 We use vertical services and deep slices as the default architecture.

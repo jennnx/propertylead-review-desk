@@ -37,6 +37,12 @@ enum HubSpotWorkflowRunOutcome {
   NO_WRITEBACK_NEEDED @map("no_writeback_needed")
 }
 
+enum SopDocumentProcessingStatus {
+  PROCESSING @map("processing")
+  READY      @map("ready")
+  FAILED     @map("failed")
+}
+
 model HubSpotWebhookEvent {
   id               String                              @id @default(cuid())
   dedupeKey        String                              @unique
@@ -52,17 +58,44 @@ model HubSpotWebhookEvent {
 }
 
 model HubSpotWorkflowRun {
-  id                    String                    @id @default(cuid())
-  hubSpotWebhookEventId String                    @unique
-  hubSpotWebhookEvent   HubSpotWebhookEvent       @relation(fields: [hubSpotWebhookEventId], references: [id], onDelete: Cascade)
-  status                HubSpotWorkflowRunStatus  @default(IN_PROGRESS)
-  outcome               HubSpotWorkflowRunOutcome?
+  id                     String                     @id @default(cuid())
+  hubSpotWebhookEventId  String                     @unique
+  hubSpotWebhookEvent    HubSpotWebhookEvent        @relation(fields: [hubSpotWebhookEventId], references: [id], onDelete: Cascade)
+  status                 HubSpotWorkflowRunStatus   @default(IN_PROGRESS)
+  outcome                HubSpotWorkflowRunOutcome?
   enrichmentInputContext Json?
-  failureMessage        String?
-  completedAt           DateTime?
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  failureMessage         String?
+  completedAt            DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
 
   @@index([status, createdAt])
   @@map("hubspot_workflow_runs")
+}
+
+model SopDocument {
+  id               String                      @id @default(cuid())
+  originalFilename String
+  contentType      String
+  byteSize         Int
+  storagePath      String
+  uploadedAt       DateTime                    @default(now())
+  processingStatus SopDocumentProcessingStatus @default(PROCESSING)
+  failureMessage   String?
+  chunks           SopChunk[]
+
+  @@index([processingStatus, uploadedAt])
+  @@map("sop_documents")
+}
+
+model SopChunk {
+  id            String                      @id @default(cuid())
+  sopDocumentId String
+  sopDocument   SopDocument                 @relation(fields: [sopDocumentId], references: [id], onDelete: Cascade)
+  ordinal       Int
+  text          String
+  embedding     Unsupported("vector(1024)")
+
+  @@unique([sopDocumentId, ordinal])
+  @@map("sop_chunks")
 }
