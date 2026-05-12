@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import {
   markHubSpotWorkflowRunFailed,
   markHubSpotWorkflowRunSucceededWithNoWriteback,
@@ -18,10 +20,10 @@ export async function handleHubSpotWebhookEvent({
   const run = await startHubSpotWorkflowRun(hubSpotWebhookEventId);
 
   try {
-    assertSupportedHubSpotWorkflowEvent(normalizedEvent);
+    const workflowEvent = parseHubSpotWorkflowEvent(normalizedEvent);
 
     console.info("Processing HubSpot Webhook Event", {
-      normalizedEvent,
+      normalizedEvent: workflowEvent,
       rawWebhook,
     });
 
@@ -36,33 +38,50 @@ export async function handleHubSpotWebhookEvent({
   }
 }
 
-function assertSupportedHubSpotWorkflowEvent(
+const hubSpotWorkflowEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("contact.created"),
+    hubSpotObjectId: z.string().min(1),
+    hubSpotPortalId: z.string().nullable().optional(),
+    occurredAt: z.string().nullable().optional(),
+  }),
+  z.object({
+    type: z.literal("conversation.message.received"),
+    hubSpotObjectId: z.string().min(1),
+    hubSpotPortalId: z.string().nullable().optional(),
+    occurredAt: z.string().nullable().optional(),
+    hubSpotMessageId: z.string().min(1),
+  }),
+]);
+
+type HubSpotWorkflowEvent = z.infer<typeof hubSpotWorkflowEventSchema>;
+
+function parseHubSpotWorkflowEvent(
   normalizedEvent: unknown,
-): asserts normalizedEvent is {
-  type: "contact.created" | "conversation.message.received";
-} {
-  if (
-    typeof normalizedEvent === "object" &&
-    normalizedEvent !== null &&
-    "type" in normalizedEvent &&
-    (normalizedEvent.type === "contact.created" ||
-      normalizedEvent.type === "conversation.message.received")
-  ) {
-    return;
+): HubSpotWorkflowEvent {
+  try {
+    return hubSpotWorkflowEventSchema.parse(normalizedEvent);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error(getUnsupportedWorkflowEventMessage(normalizedEvent));
+    }
+    throw error;
+  }
+}
+
+function getUnsupportedWorkflowEventMessage(normalizedEvent: unknown): string {
+  const eventType = z
+    .object({
+      type: z.string().min(1),
+    })
+    .passthrough()
+    .safeParse(normalizedEvent);
+
+  if (eventType.success) {
+    return `Unsupported HubSpot Workflow Event: ${eventType.data.type}`;
   }
 
-  if (
-    typeof normalizedEvent === "object" &&
-    normalizedEvent !== null &&
-    "type" in normalizedEvent &&
-    typeof normalizedEvent.type === "string"
-  ) {
-    throw new Error(
-      `Unsupported HubSpot Workflow Event: ${normalizedEvent.type}`,
-    );
-  }
-
-  throw new Error("Unsupported HubSpot Workflow Event");
+  return "Unsupported HubSpot Workflow Event";
 }
 
 function getErrorMessage(error: unknown): string {
