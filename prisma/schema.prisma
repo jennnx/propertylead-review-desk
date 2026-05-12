@@ -27,6 +27,16 @@ enum HubSpotWebhookEventProcessingStatus {
   IGNORED    @map("ignored")
 }
 
+enum HubSpotWorkflowRunStatus {
+  IN_PROGRESS @map("in_progress")
+  SUCCEEDED   @map("succeeded")
+  FAILED      @map("failed")
+}
+
+enum HubSpotWorkflowRunOutcome {
+  NO_WRITEBACK_NEEDED @map("no_writeback_needed")
+}
+
 model HubSpotWebhookEvent {
   id               String                              @id @default(cuid())
   dedupeKey        String                              @unique
@@ -35,7 +45,23 @@ model HubSpotWebhookEvent {
   receivedAt       DateTime                            @default(now())
   processingStatus HubSpotWebhookEventProcessingStatus @default(NEW)
   processedAt      DateTime?
+  workflowRun      HubSpotWorkflowRun?
 
   @@index([processingStatus, receivedAt])
   @@map("hubspot_webhook_events")
+}
+
+model HubSpotWorkflowRun {
+  id                    String                    @id @default(cuid())
+  hubSpotWebhookEventId String                    @unique
+  hubSpotWebhookEvent   HubSpotWebhookEvent       @relation(fields: [hubSpotWebhookEventId], references: [id], onDelete: Cascade)
+  status                HubSpotWorkflowRunStatus  @default(IN_PROGRESS)
+  outcome               HubSpotWorkflowRunOutcome?
+  failureMessage        String?
+  completedAt           DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  @@index([status, createdAt])
+  @@map("hubspot_workflow_runs")
 }

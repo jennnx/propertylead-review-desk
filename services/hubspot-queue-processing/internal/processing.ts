@@ -38,6 +38,7 @@ export async function processHubSpotWebhookProcessingJob({
       }
 
       await handleHubSpotWebhookEvent({
+        hubSpotWebhookEventId: event.id,
         normalizedEvent: event.normalizedEvent,
         rawWebhook: event.rawWebhook,
       });
