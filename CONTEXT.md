@@ -51,8 +51,8 @@ One inbound HubSpot webhook request containing one or more HubSpot webhook event
 _Avoid_: Single event request
 
 **HubSpot Integration**:
-The app's only supported CRM integration, configured as a HubSpot developer project for one company's HubSpot account.
-_Avoid_: CRM integration, provider integration
+The app's only supported CRM integration, configured for exactly one company's HubSpot account.
+_Avoid_: CRM integration, provider integration, multi-account installation
 
 **HubSpot Webhook URL**:
 The absolute endpoint HubSpot calls, derived from the app base URL and the HubSpot webhook route path.
@@ -74,12 +74,43 @@ fetches additional HubSpot data, supplements it with app-owned data, and
 decides the next HubSpot-facing steps.
 _Avoid_: Generic CRM workflow, lead intake
 
+**HubSpot Workflow Run**:
+An operational record that PropertyLead Review Desk considered one stored HubSpot Webhook Event for HubSpot-native workflow handling.
+_Avoid_: Lead state, enrichment table
+
+**Enrichment Input Context**:
+The bounded HubSpot and app-owned information PropertyLead Review Desk used when deciding whether and how to enrich a HubSpot contact.
+_Avoid_: Contact mirror, CRM snapshot
+
+**Current Conversation Session**:
+The recent HubSpot Conversations thread context PropertyLead Review Desk uses to reason about a triggering inbound message.
+_Avoid_: Full conversation archive, arbitrary activity feed
+
+**HubSpot Writeback Plan**:
+A structured proposal that says which HubSpot fields should be updated, which HubSpot note should be created, or why no HubSpot writeback is needed.
+_Avoid_: Direct AI writeback, final CRM state
+
+**Writable HubSpot Property Catalog**:
+The static, pre-approved set of HubSpot properties PropertyLead Review Desk may propose in HubSpot Writeback Plans.
+_Avoid_: Dynamic property discovery, arbitrary AI-selected fields
+
 ## Relationships
 
 - A **HubSpot Webhook Event** may later produce or update a lead review workflow, but ingestion does not decide that mapping.
 - A **HubSpot Webhook Batch** contains one or more **HubSpot Webhook Events**.
 - A **HubSpot Webhook Processing Job** is derived from its **HubSpot Webhook Event**; the event record is the canonical input.
 - **HubSpot Queue Processing** consumes **HubSpot Webhook Processing Jobs** and delegates actual app behavior to **HubSpot Workflows**.
+- A **HubSpot Webhook Event** may produce zero or one **HubSpot Workflow Run**.
+- A **HubSpot Workflow Run** may produce zero or more AI runs and zero or more HubSpot writebacks.
+- A **HubSpot Workflow Run** records the **Enrichment Input Context** used for audit and evaluation, not the current HubSpot contact state.
+- For inbound messages, **Enrichment Input Context** includes the **Current Conversation Session** from the HubSpot Conversations thread, capping to the latest 30 messages by default and preserving HubSpot message metadata such as actor IDs, direction, text or rich text, timestamps, and truncation status.
+- A **HubSpot Writeback Plan** is validated and executed by PropertyLead Review Desk; Claude may propose the plan but does not own execution policy.
+- A **HubSpot Writeback Plan** stored by this app does not by itself imply a pending HubSpot writeback.
+- A **HubSpot Writeback Plan** either proposes at least one HubSpot field update or note, or gives a no-writeback reason; field updates and a note may appear together, but proposed writes and no-writeback reasoning are mutually exclusive.
+- Field updates in a **HubSpot Writeback Plan** must target properties from the static **Writable HubSpot Property Catalog**.
+- Setup may automatically create missing PropertyLead-owned HubSpot properties from the **Writable HubSpot Property Catalog**; runtime workflow processing does not dynamically create properties.
+- If PropertyLead Review Desk cannot produce a valid **HubSpot Writeback Plan**, the **HubSpot Workflow Run** fails rather than treating the event as no-writeback-needed.
+- A successful **HubSpot Workflow Run** may decide that no HubSpot writeback is needed.
 - A duplicate delivery of an unprocessed stored **HubSpot Webhook Event** may repair or confirm its **HubSpot Webhook Processing Job**.
 - A **HubSpot Integration** receives **HubSpot Webhook Events** from exactly one HubSpot account.
 - A **HubSpot Integration** has exactly one **HubSpot Webhook URL**.
