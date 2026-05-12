@@ -85,8 +85,8 @@ The bounded HubSpot and app-owned information PropertyLead Review Desk used when
 _Avoid_: Contact mirror, CRM snapshot
 
 **Current Conversation Session**:
-The recent HubSpot Conversations thread context PropertyLead Review Desk uses to reason about a triggering inbound message.
-_Avoid_: Full conversation archive, arbitrary activity feed
+The recent HubSpot Conversations message context PropertyLead Review Desk uses to reason about a triggering inbound message, aggregated across all of the contact's HubSpot Conversations threads rather than the triggering thread alone.
+_Avoid_: Single-thread context, full conversation archive, arbitrary activity feed
 
 **HubSpot Writeback Plan**:
 A structured proposal that says which HubSpot fields should be updated, which HubSpot note should be created, or why no HubSpot writeback is needed.
@@ -105,7 +105,7 @@ _Avoid_: Dynamic property discovery, arbitrary AI-selected fields
 - A **HubSpot Webhook Event** may produce zero or one **HubSpot Workflow Run**.
 - A **HubSpot Workflow Run** may produce zero or more AI runs and zero or more HubSpot writebacks.
 - A **HubSpot Workflow Run** records the **Enrichment Input Context** used for audit and evaluation, not the current HubSpot contact state.
-- For inbound messages, **Enrichment Input Context** includes the **Current Conversation Session** from the HubSpot Conversations thread, capping to the latest 30 messages by default and preserving HubSpot message metadata such as actor IDs, direction, text or rich text, timestamps, and truncation status.
+- For inbound messages, **Enrichment Input Context** includes the **Current Conversation Session** drawn from all of the contact's HubSpot Conversations threads, capping to the latest 30 messages overall by default and preserving HubSpot message metadata such as actor IDs, direction, text or rich text, timestamps, and truncation status.
 - A **HubSpot Writeback Plan** is validated and executed by PropertyLead Review Desk; Claude may propose the plan but does not own execution policy.
 - A **HubSpot Writeback Plan** stored by this app does not by itself imply a pending HubSpot writeback.
 - A **HubSpot Writeback Plan** either proposes at least one HubSpot field update or note, or gives a no-writeback reason; field updates and a note may appear together, but proposed writes and no-writeback reasoning are mutually exclusive.

@@ -93,6 +93,53 @@ describe("HubSpot service", () => {
     );
   });
 
+  test("lists HubSpot Conversations threads for a contact across paged responses", async () => {
+    const fetchHubSpot = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [
+              { id: "thread-1", associatedContactId: "contact-7" },
+              { id: "thread-2", associatedContactId: "contact-7" },
+            ],
+            paging: { next: { after: "cursor-2" } },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [{ id: "thread-3", associatedContactId: "contact-7" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+
+    const { createHubSpotClient } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const client = createHubSpotClient({ fetch: fetchHubSpot });
+    const threadList = await client.listConversationThreads({
+      associatedContactId: "contact-7",
+    });
+
+    expect(threadList.results.map((thread) => thread.id)).toEqual([
+      "thread-1",
+      "thread-2",
+      "thread-3",
+    ]);
+    expect(fetchHubSpot).toHaveBeenCalledTimes(2);
+    expect(fetchHubSpot.mock.calls[0][0]).toBe(
+      "https://api.hubapi.com/conversations/v3/conversations/threads?associatedContactId=contact-7&limit=100",
+    );
+    expect(fetchHubSpot.mock.calls[1][0]).toBe(
+      "https://api.hubapi.com/conversations/v3/conversations/threads?associatedContactId=contact-7&limit=100&after=cursor-2",
+    );
+  });
+
   test("reads a HubSpot contact property with the configured token", async () => {
     const fetchHubSpot = vi.fn().mockResolvedValue(
       new Response(

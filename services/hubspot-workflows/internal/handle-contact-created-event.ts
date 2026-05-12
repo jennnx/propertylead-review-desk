@@ -1,8 +1,9 @@
-import {
-  WRITABLE_HUBSPOT_PROPERTY_CATALOG,
-  type HubSpotClient,
-} from "@/services/hubspot";
+import type { HubSpotClient } from "@/services/hubspot";
 
+import {
+  ENRICHMENT_INPUT_CONTACT_PROPERTY_NAMES,
+  pickEnrichmentContactProperties,
+} from "./enrichment-properties";
 import { recordHubSpotWorkflowRunEnrichmentInputContext } from "./mutations";
 
 export type ContactCreatedWorkflowEvent = {
@@ -11,14 +12,6 @@ export type ContactCreatedWorkflowEvent = {
   hubSpotPortalId?: string | null;
   occurredAt?: string | null;
 };
-
-const contactCreatedEnrichmentPropertyNames = [
-  ...WRITABLE_HUBSPOT_PROPERTY_CATALOG.map((entry) => entry.name),
-  "hs_analytics_source_data_1",
-  "hs_analytics_source_data_2",
-  "hs_latest_source_data_1",
-  "hs_latest_source_data_2",
-];
 
 export async function handleContactCreatedWorkflowEvent({
   runId,
@@ -30,7 +23,7 @@ export async function handleContactCreatedWorkflowEvent({
   hubSpot: Pick<HubSpotClient, "getContact">;
 }): Promise<void> {
   const contact = await hubSpot.getContact(workflowEvent.hubSpotObjectId, {
-    properties: contactCreatedEnrichmentPropertyNames,
+    properties: [...ENRICHMENT_INPUT_CONTACT_PROPERTY_NAMES],
   });
 
   await recordHubSpotWorkflowRunEnrichmentInputContext(runId, {
@@ -39,23 +32,7 @@ export async function handleContactCreatedWorkflowEvent({
     occurredAt: workflowEvent.occurredAt ?? null,
     contact: {
       id: contact.id,
-      properties: pickContactProperties(
-        contact.properties,
-        contactCreatedEnrichmentPropertyNames,
-      ),
+      properties: pickEnrichmentContactProperties(contact.properties),
     },
   });
-}
-
-function pickContactProperties(
-  properties: Record<string, string | null>,
-  allowedNames: readonly string[],
-): Record<string, string | null> {
-  const picked: Record<string, string | null> = {};
-
-  for (const name of allowedNames) {
-    picked[name] = properties[name] ?? null;
-  }
-
-  return picked;
 }

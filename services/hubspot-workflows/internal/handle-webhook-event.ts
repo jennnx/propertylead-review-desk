@@ -7,6 +7,10 @@ import {
 
 import { handleContactCreatedWorkflowEvent } from "./handle-contact-created-event";
 import {
+  handleInboundMessageWorkflowEvent,
+  type InboundMessageHubSpotClient,
+} from "./handle-inbound-message-event";
+import {
   markHubSpotWorkflowRunFailed,
   markHubSpotWorkflowRunSucceededWithNoWriteback,
   startHubSpotWorkflowRun,
@@ -16,7 +20,7 @@ export type HandleHubSpotWebhookEventInput = {
   hubSpotWebhookEventId: string;
   normalizedEvent: unknown;
   rawWebhook: unknown;
-  hubSpot?: Pick<HubSpotClient, "getContact">;
+  hubSpot?: Pick<HubSpotClient, "getContact"> & InboundMessageHubSpotClient;
 };
 
 export async function handleHubSpotWebhookEvent({
@@ -37,6 +41,12 @@ export async function handleHubSpotWebhookEvent({
 
     if (workflowEvent.type === "contact.created") {
       await handleContactCreatedWorkflowEvent({
+        runId: run.id,
+        workflowEvent,
+        hubSpot,
+      });
+    } else if (workflowEvent.type === "conversation.message.received") {
+      await handleInboundMessageWorkflowEvent({
         runId: run.id,
         workflowEvent,
         hubSpot,

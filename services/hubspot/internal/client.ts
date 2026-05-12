@@ -26,6 +26,30 @@ export type HubSpotConversationThreadMessages = {
   results: unknown[];
 };
 
+export type HubSpotConversationThread = {
+  id: string;
+  associatedContactId: string | null;
+};
+
+export type ListHubSpotConversationThreadsInput = {
+  associatedContactId: string;
+};
+
+export type HubSpotConversationThreadList = {
+  results: HubSpotConversationThread[];
+};
+
+type HubSpotConversationThreadPage = {
+  results: HubSpotConversationThread[];
+  paging?: {
+    next?: {
+      after?: string;
+    };
+  };
+};
+
+const HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE = 100;
+
 export type HubSpotContactProperty = {
   name: string;
   label?: string;
@@ -45,6 +69,12 @@ export type HubSpotClient = {
     contactId: string,
     input: GetHubSpotContactInput,
   ) => Promise<HubSpotContact>;
+  getConversationThread: (
+    threadId: string,
+  ) => Promise<HubSpotConversationThread>;
+  listConversationThreads: (
+    input: ListHubSpotConversationThreadsInput,
+  ) => Promise<HubSpotConversationThreadList>;
   getConversationThreadMessages: (
     threadId: string,
     input?: GetHubSpotConversationThreadMessagesInput,
@@ -95,6 +125,33 @@ export function createHubSpotClient({
           }),
         },
       );
+    },
+    async getConversationThread(threadId) {
+      return request<HubSpotConversationThread>(
+        `/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}`,
+      );
+    },
+    async listConversationThreads(input) {
+      const results: HubSpotConversationThread[] = [];
+      let after: string | undefined;
+
+      do {
+        const searchParams = new URLSearchParams({
+          associatedContactId: input.associatedContactId,
+          limit: String(HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE),
+        });
+        if (after) searchParams.set("after", after);
+
+        const page = await request<HubSpotConversationThreadPage>(
+          `/conversations/v3/conversations/threads`,
+          { searchParams },
+        );
+
+        results.push(...page.results);
+        after = page.paging?.next?.after;
+      } while (after);
+
+      return { results };
     },
     async getConversationThreadMessages(threadId, input = {}) {
       return request<HubSpotConversationThreadMessages>(
