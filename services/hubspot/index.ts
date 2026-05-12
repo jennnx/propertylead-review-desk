@@ -10,3 +10,12 @@ export {
   type HubSpotWebhookEvent,
   type ReceiveHubSpotWebhookBatchInput,
 } from "./internal/webhook-receipt";
+export {
+  claimHubSpotWebhookEventForProcessing,
+  markHubSpotWebhookEventFailed,
+  markHubSpotWebhookEventProcessed,
+} from "./internal/mutations";
+export {
+  getHubSpotWebhookEventForProcessing,
+  type HubSpotWebhookEventForProcessing,
+} from "./internal/queries";

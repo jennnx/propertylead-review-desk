@@ -4,22 +4,40 @@ import { createHmacSignature } from "@/lib/hmac-signature";
 import { importWithRequiredEnv } from "@/tests/env";
 
 const createMany = vi.fn();
+const findMany = vi.fn();
+const enqueueQueueJobWithRetries = vi.fn();
 
 vi.mock("@/services/database", () => ({
   getPrismaClient: () => ({
     hubSpotWebhookEvent: {
       createMany,
+      findMany,
     },
   }),
+}));
+
+vi.mock("@/services/queue", () => ({
+  QUEUE_NAMES: {
+    HUBSPOT_WEBHOOK_PROCESS: "hubspot.webhook.process",
+  },
+  enqueueQueueJobWithRetries,
 }));
 
 describe("HubSpot Integration service", () => {
   beforeEach(() => {
     createMany.mockReset();
+    findMany.mockReset();
+    enqueueQueueJobWithRetries.mockReset();
   });
 
   test("records contact creation HubSpot Webhook Events as new work for the worker", async () => {
     createMany.mockResolvedValue({ count: 1 });
+    findMany.mockResolvedValue([
+      {
+        id: "hubspot-event-1",
+      },
+    ]);
+    enqueueQueueJobWithRetries.mockResolvedValue(undefined);
     const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
       import("./index"),
     );
@@ -54,6 +72,7 @@ describe("HubSpot Integration service", () => {
 
     expect(receipt.acceptedEventCount).toBe(1);
     expect(receipt.persistedEventCount).toBe(1);
+    expect(receipt.enqueuedProcessingJobCount).toBe(1);
     expect(createMany).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({
@@ -70,10 +89,26 @@ describe("HubSpot Integration service", () => {
       ],
       skipDuplicates: true,
     });
+    expect(enqueueQueueJobWithRetries).toHaveBeenCalledWith({
+      queueName: "hubspot.webhook.process",
+      jobName: "hubspot.webhook.process",
+      data: { hubSpotWebhookEventId: "hubspot-event-1" },
+      jobOptions: {
+        jobId: "hubspot-webhook-event:hubspot-event-1",
+      },
+      enqueueAttempts: 3,
+      retryDelayMs: 50,
+    });
   });
 
   test("records conversation new MESSAGE HubSpot Webhook Events as new work for the worker", async () => {
     createMany.mockResolvedValue({ count: 1 });
+    findMany.mockResolvedValue([
+      {
+        id: "hubspot-event-2",
+      },
+    ]);
+    enqueueQueueJobWithRetries.mockResolvedValue(undefined);
     const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
       import("./index"),
     );
@@ -107,6 +142,7 @@ describe("HubSpot Integration service", () => {
     });
 
     expect(receipt.persistedEventCount).toBe(1);
+    expect(receipt.enqueuedProcessingJobCount).toBe(1);
     expect(createMany).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({
@@ -172,6 +208,115 @@ describe("HubSpot Integration service", () => {
     expect(createMany).not.toHaveBeenCalled();
   });
 
+  test("enqueues processing for duplicate HubSpot Webhook Events that are still new", async () => {
+    createMany.mockResolvedValue({ count: 0 });
+    findMany.mockResolvedValue([
+      {
+        id: "existing-new-hubspot-event",
+      },
+    ]);
+    enqueueQueueJobWithRetries.mockResolvedValue(undefined);
+    const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+    const timestamp = "1710000000000";
+    const rawEvents = [
+      {
+        appId: 456,
+        eventId: 1001,
+        objectId: 123,
+        objectTypeId: "0-1",
+        occurredAt: 1709999999000,
+        portalId: 789,
+        subscriptionId: 333,
+        subscriptionType: "object.creation",
+      },
+    ];
+    const rawBody = JSON.stringify(rawEvents);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const receipt = await receiveHubSpotWebhookBatch({
+      method: "POST",
+      rawBody,
+      signature,
+      timestamp,
+      webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+      now: new Date(Number(timestamp) + 1_000),
+    });
+
+    expect(receipt.persistedEventCount).toBe(0);
+    expect(receipt.enqueuedProcessingJobCount).toBe(1);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        dedupeKey: {
+          in: [expect.any(String)],
+        },
+        processingStatus: "NEW",
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(enqueueQueueJobWithRetries).toHaveBeenCalledWith({
+      queueName: "hubspot.webhook.process",
+      jobName: "hubspot.webhook.process",
+      data: { hubSpotWebhookEventId: "existing-new-hubspot-event" },
+      jobOptions: {
+        jobId: "hubspot-webhook-event:existing-new-hubspot-event",
+      },
+      enqueueAttempts: 3,
+      retryDelayMs: 50,
+    });
+  });
+
+  test("surfaces HubSpot Webhook Processing Job enqueue failures after retries are exhausted", async () => {
+    createMany.mockResolvedValue({ count: 1 });
+    findMany.mockResolvedValue([
+      {
+        id: "hubspot-event-enqueue-failure",
+      },
+    ]);
+    enqueueQueueJobWithRetries.mockRejectedValue(new Error("redis unavailable"));
+    const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+    const timestamp = "1710000000000";
+    const rawEvents = [
+      {
+        appId: 456,
+        eventId: 1001,
+        objectId: 123,
+        objectTypeId: "0-1",
+        occurredAt: 1709999999000,
+        portalId: 789,
+        subscriptionId: 333,
+        subscriptionType: "object.creation",
+      },
+    ];
+    const rawBody = JSON.stringify(rawEvents);
+    const signature = createHmacSignature({
+      secret: "test-hubspot-client-secret",
+      source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
+    });
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(
+      receiveHubSpotWebhookBatch({
+        method: "POST",
+        rawBody,
+        signature,
+        timestamp,
+        webhookUrl: "https://desk.example.com/api/hubspot/webhook",
+        now: new Date(Number(timestamp) + 1_000),
+      }),
+    ).rejects.toThrow("redis unavailable");
+    expect(enqueueQueueJobWithRetries).toHaveBeenCalledTimes(1);
+  });
+
   test("derives the HubSpot Webhook URL from the app base URL and route path", async () => {
     const { getHubSpotWebhookUrl, HUBSPOT_WEBHOOK_ROUTE_PATH } =
       await importWithRequiredEnv(() => import("./index"));
@@ -224,7 +369,11 @@ describe("HubSpot Integration service", () => {
     expect(receipt.events).toEqual(rawEvents);
     expect(consoleInfo).toHaveBeenCalledWith(
       "Accepted HubSpot Webhook Batch",
-      { eventCount: 2, persistedEventCount: 0 },
+      {
+        eventCount: 2,
+        persistedEventCount: 0,
+        enqueuedProcessingJobCount: 0,
+      },
     );
   });
 

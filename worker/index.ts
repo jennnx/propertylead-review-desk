@@ -8,6 +8,7 @@
 import "../lib/env";
 import { disconnectPrismaClient } from "../services/database";
 import { QUEUE_NAMES, createWorker, type Worker } from "../services/queue";
+import { processHubSpotWebhookProcess } from "./jobs/hubspot-webhook-process";
 import { disconnectProbeRedis, processInfraSmoke } from "./jobs/infra-smoke";
 
 // BullMQ's `Worker` is contravariant in its `NameType` generic, so a
@@ -17,6 +18,27 @@ import { disconnectProbeRedis, processInfraSmoke } from "./jobs/infra-smoke";
 type AnyWorker = Worker<unknown, unknown, string>;
 
 function registerWorkers(): AnyWorker[] {
+  const hubSpotWebhookName = QUEUE_NAMES.HUBSPOT_WEBHOOK_PROCESS;
+  const hubSpotWebhook = createWorker(
+    hubSpotWebhookName,
+    processHubSpotWebhookProcess,
+  );
+  hubSpotWebhook.on("ready", () => {
+    console.log(`worker[${hubSpotWebhookName}]: ready`);
+  });
+  hubSpotWebhook.on("completed", (job) => {
+    console.log(`worker[${hubSpotWebhookName}]: job ${job.id} completed`);
+  });
+  hubSpotWebhook.on("failed", (job, err) => {
+    console.error(
+      `worker[${hubSpotWebhookName}]: job ${job?.id ?? "?"} failed:`,
+      err,
+    );
+  });
+  hubSpotWebhook.on("error", (err) => {
+    console.error(`worker[${hubSpotWebhookName}]: error:`, err);
+  });
+
   const infraSmokeName = QUEUE_NAMES.INFRA_SMOKE;
   const infraSmoke = createWorker(infraSmokeName, processInfraSmoke);
 
@@ -33,7 +55,7 @@ function registerWorkers(): AnyWorker[] {
     console.error(`worker[${infraSmokeName}]: error:`, err);
   });
 
-  return [infraSmoke as AnyWorker];
+  return [hubSpotWebhook as AnyWorker, infraSmoke as AnyWorker];
 }
 
 async function shutdown(workers: AnyWorker[], signal: string): Promise<void> {

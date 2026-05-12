@@ -14,13 +14,29 @@ export type RecordHubSpotWebhookEventInput = {
   };
 };
 
+export type HubSpotWebhookProcessingJobCandidate = {
+  id: string;
+};
+
+export type RecordHubSpotWebhookEventsResult = {
+  persistedEventCount: number;
+  processingJobCandidates: HubSpotWebhookProcessingJobCandidate[];
+};
+
 export async function recordHubSpotWebhookEvents(
   events: RecordHubSpotWebhookEventInput[],
   receivedAt: Date,
-): Promise<number> {
-  if (events.length === 0) return 0;
+): Promise<RecordHubSpotWebhookEventsResult> {
+  if (events.length === 0) {
+    return {
+      persistedEventCount: 0,
+      processingJobCandidates: [],
+    };
+  }
 
-  const result = await getPrismaClient().hubSpotWebhookEvent.createMany({
+  const prisma = getPrismaClient();
+
+  const result = await prisma.hubSpotWebhookEvent.createMany({
     data: events.map((event) => ({
       dedupeKey: event.dedupeKey,
       normalizedEvent: event.normalizedEvent as Prisma.InputJsonObject,
@@ -32,5 +48,64 @@ export async function recordHubSpotWebhookEvents(
     skipDuplicates: true,
   });
 
-  return result.count;
+  const processingJobCandidates = await prisma.hubSpotWebhookEvent.findMany({
+    where: {
+      dedupeKey: {
+        in: events.map((event) => event.dedupeKey),
+      },
+      processingStatus: "NEW",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return {
+    persistedEventCount: result.count,
+    processingJobCandidates,
+  };
+}
+
+export async function claimHubSpotWebhookEventForProcessing(
+  id: string,
+): Promise<boolean> {
+  const result = await getPrismaClient().hubSpotWebhookEvent.updateMany({
+    where: {
+      id,
+      processingStatus: "NEW",
+    },
+    data: {
+      processingStatus: "PROCESSING",
+    },
+  });
+
+  return result.count === 1;
+}
+
+export async function markHubSpotWebhookEventProcessed(
+  id: string,
+  processedAt: Date,
+): Promise<void> {
+  await getPrismaClient().hubSpotWebhookEvent.updateMany({
+    where: {
+      id,
+      processingStatus: "PROCESSING",
+    },
+    data: {
+      processingStatus: "PROCESSED",
+      processedAt,
+    },
+  });
+}
+
+export async function markHubSpotWebhookEventFailed(id: string): Promise<void> {
+  await getPrismaClient().hubSpotWebhookEvent.updateMany({
+    where: {
+      id,
+      processingStatus: "PROCESSING",
+    },
+    data: {
+      processingStatus: "FAILED",
+    },
+  });
 }

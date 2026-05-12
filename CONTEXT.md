@@ -58,13 +58,21 @@ _Avoid_: CRM integration, provider integration
 The absolute endpoint HubSpot calls, derived from the app base URL and the HubSpot webhook route path.
 _Avoid_: Callback URL, inferred URL
 
+**HubSpot Webhook Processing Job**:
+A queued processing unit associated with one stored target HubSpot Webhook Event.
+_Avoid_: Task, generic job
+
 ## Relationships
 
 - A **HubSpot Webhook Event** may later produce or update a lead review workflow, but ingestion does not decide that mapping.
 - A **HubSpot Webhook Batch** contains one or more **HubSpot Webhook Events**.
+- A **HubSpot Webhook Processing Job** is derived from its **HubSpot Webhook Event**; the event record is the canonical input.
+- A duplicate delivery of an unprocessed stored **HubSpot Webhook Event** may repair or confirm its **HubSpot Webhook Processing Job**.
 - A **HubSpot Integration** receives **HubSpot Webhook Events** from exactly one HubSpot account.
 - A **HubSpot Integration** has exactly one **HubSpot Webhook URL**.
 
 ## Flagged ambiguities
 
 - "HubSpot setup" means a HubSpot developer project with static auth, not a legacy private app UI setup.
+- "task" was used to mean a queued **HubSpot Webhook Processing Job**, not a separate durable domain model.
+- Unsupported or already processed duplicate HubSpot webhook events can be accepted at the HTTP boundary without producing a new **HubSpot Webhook Processing Job**.

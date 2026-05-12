@@ -4,6 +4,7 @@ import {
   recordHubSpotWebhookEvents,
   type RecordHubSpotWebhookEventInput,
 } from "./mutations";
+import { enqueueHubSpotWebhookProcessingJobs } from "./processing-queue";
 import {
   createHubSpotWebhookEventDedupeKey,
   normalizeHubSpotOccurredAt,
@@ -37,6 +38,7 @@ export type HubSpotWebhookBatchReceipt = {
   events: HubSpotWebhookEvent[];
   acceptedEventCount: number;
   persistedEventCount: number;
+  enqueuedProcessingJobCount: number;
 };
 
 export class HubSpotWebhookReceiptError extends Error {
@@ -75,17 +77,23 @@ export async function receiveHubSpotWebhookBatch({
     console.info("Received target HubSpot Webhook Event", event.normalizedEvent);
   }
 
-  const persistedEventCount = await recordHubSpotWebhookEvents(targetEvents, now);
+  const { persistedEventCount, processingJobCandidates } =
+    await recordHubSpotWebhookEvents(targetEvents, now);
+  const enqueuedProcessingJobCount = await enqueueHubSpotWebhookProcessingJobs(
+    processingJobCandidates,
+  );
 
   console.info("Accepted HubSpot Webhook Batch", {
     eventCount: events.length,
     persistedEventCount,
+    enqueuedProcessingJobCount,
   });
 
   return {
     events,
     acceptedEventCount: events.length,
     persistedEventCount,
+    enqueuedProcessingJobCount,
   };
 }
 

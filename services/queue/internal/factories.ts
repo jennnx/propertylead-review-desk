@@ -3,6 +3,7 @@ import { Queue, QueueEvents, Worker, type Processor } from "bullmq";
 import { createRedisConnection } from "./connection";
 
 export const QUEUE_NAMES = {
+  HUBSPOT_WEBHOOK_PROCESS: "hubspot.webhook.process",
   INFRA_SMOKE: "infra.smoke",
 } as const;
 

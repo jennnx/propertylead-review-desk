@@ -7,6 +7,10 @@ export {
   type QueueName,
 } from "./internal/factories";
 export {
+  enqueueQueueJobWithRetries,
+  type EnqueueQueueJobInput,
+} from "./internal/enqueue";
+export {
   checkQueueInspectable,
   checkRedisReachable,
   type CheckResult,
