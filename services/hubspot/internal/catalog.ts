@@ -22,8 +22,8 @@ const standardContactProperties = [
   textProperty("email", "Email", "verify"),
   textProperty("firstname", "First name", "verify"),
   textProperty("lastname", "Last name", "verify"),
-  textProperty("phone", "Phone number", "verify"),
-  textProperty("mobilephone", "Mobile phone number", "verify"),
+  phoneProperty("phone", "Phone number"),
+  phoneProperty("mobilephone", "Mobile phone number"),
   textProperty("address", "Street address", "verify"),
   textProperty("city", "City", "verify"),
   textProperty("state", "State/region", "verify"),
@@ -213,6 +213,19 @@ function textProperty(
     type: "string",
     fieldType: "text",
     setup,
+  };
+}
+
+function phoneProperty(
+  name: string,
+  label: string,
+): WritableHubSpotPropertyCatalogEntry {
+  return {
+    name,
+    label,
+    type: "string",
+    fieldType: "phonenumber",
+    setup: "verify",
   };
 }
 

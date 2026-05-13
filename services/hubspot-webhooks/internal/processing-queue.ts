@@ -11,7 +11,7 @@ export type HubSpotWebhookProcessingJobData = {
 export function createHubSpotWebhookProcessingJobId(
   hubSpotWebhookEventId: string,
 ): string {
-  return `hubspot-webhook-event:${hubSpotWebhookEventId}`;
+  return `hubspot-webhook-event-${hubSpotWebhookEventId}`;
 }
 
 export async function enqueueHubSpotWebhookProcessingJobs(

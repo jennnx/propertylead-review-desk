@@ -65,5 +65,20 @@ describe("HubSpot developer project configuration", () => {
         },
       },
     });
+
+    const [contactCreationSubscription] = (
+      webhooks as {
+        config: {
+          subscriptions: {
+            crmObjects: Array<Record<string, unknown>>;
+          };
+        };
+      }
+    ).config.subscriptions.crmObjects;
+    expect(contactCreationSubscription).toHaveProperty("objectType", "contact");
+    expect(contactCreationSubscription).not.toHaveProperty("objectName");
+    expect(app).toHaveProperty("config.permittedUrls.fetch", [
+      "https://app-base-url.example.com",
+    ]);
   });
 });
