@@ -87,7 +87,12 @@ export function buildInboundMessageWritebackPlanPrompt(input: {
   ].join("\n");
 
   const userMessage = [
-    `An inbound HubSpot Conversations message (triggeringMessageId=${input.enrichmentInputContext.triggeringMessageId}) was received. Propose a HubSpot Writeback Plan.`,
+    "An inbound HubSpot Conversations message was received. Propose a HubSpot Writeback Plan.",
+    "",
+    "Triggering message id:",
+    "```",
+    input.enrichmentInputContext.triggeringMessageId,
+    "```",
     "",
     "Current HubSpot contact:",
     "```json",

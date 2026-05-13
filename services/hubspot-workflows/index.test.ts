@@ -938,7 +938,7 @@ describe("HubSpot workflows service", () => {
     expect(userMessage).toContain("msg-c");
     expect(userMessage).toContain("msg-b");
     expect(userMessage).toContain("msg-a");
-    expect(userMessage).toContain("triggeringMessageId=msg-c");
+    expect(userMessage).toMatch(/Triggering message id:\s*```\s*msg-c\s*```/);
   });
 
   test("represents suggested replies inside proposed note content, not as a separate domain field", async () => {
