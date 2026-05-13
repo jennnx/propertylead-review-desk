@@ -80,6 +80,135 @@ And the direct Prisma call should live behind:
 getPrismaClient().hubSpotWebhookEvent.createMany(...)
 ```
 
+## Failure mode (do not do this)
+
+The recurring failure mode is: an orchestration file (`operations.ts`,
+`ingestion.ts`, `processing.ts`, a `handle-*` file) imports
+`getPrismaClient` from `services/database` or imports `Prisma` from
+`@prisma/client` and writes the database call inline. Often the author
+tells themselves "it's a single call, a mutation file is overkill."
+The cost compounds anyway:
+
+- Tests have to mock the entire Prisma client shape — `sopDocument:
+  { create, findMany, findUnique, update, delete }`, `sopChunk:
+  { deleteMany }`, `$transaction`, `$executeRaw`, `$queryRaw` — even
+  when each individual test only cares about one of those calls.
+  Mocks balloon and start asserting on Prisma argument shapes
+  (`expect(prisma.sopDocument.update).toHaveBeenCalledWith({ where: …,
+  data: … })`) instead of asserting on observable behavior.
+- Prisma-specific concerns leak upward: `Prisma.DbNull`,
+  `Prisma.JsonValue`, `PrismaClientKnownRequestError` codes
+  (`"P2025"`), raw SQL strings, pgvector literal construction. The
+  orchestrator now knows table names, column names, and ORM error
+  semantics. Swapping the ORM is no longer a localized change.
+- Multi-step writes get encoded inline as `prisma.$transaction(async
+  (tx) => …)` blocks with three or four operations inside. The
+  transactional contract — "these writes succeed or fail together" —
+  lives in an anonymous arrow function in an orchestration file
+  instead of being a named mutation a future reader can search for.
+
+### Concrete anti-pattern
+
+```ts
+// services/sop/internal/operations.ts — BAD
+import { Prisma } from "@prisma/client";
+import { getPrismaClient } from "@/services/database";
+
+export async function deleteSopDocument(id: string): Promise<void> {
+  try {
+    const { storagePath } = await getPrismaClient().sopDocument.delete({
+      where: { id },
+      select: { storagePath: true },
+    });
+    await unlink(storagePath);
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return; // not-found is a no-op
+    }
+    throw error;
+  }
+}
+```
+
+The orchestrator is now coupled to Prisma the library: it knows the
+error class, the error code string, the `.delete` method, and the
+`select` projection grammar. A test for "delete is a no-op for
+non-existent ids" has to construct a `PrismaClientKnownRequestError`
+to make this branch run.
+
+### Resolution
+
+Move the database call into `mutations.ts` and surface a return value
+that expresses what the orchestrator actually needs to know:
+
+```ts
+// services/sop/internal/mutations.ts — GOOD
+import { Prisma } from "@prisma/client";
+import { getPrismaClient } from "@/services/database";
+
+export async function deleteSopDocumentRow(
+  id: string,
+): Promise<{ storagePath: string } | null> {
+  try {
+    return await getPrismaClient().sopDocument.delete({
+      where: { id },
+      select: { storagePath: true },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+```
+
+```ts
+// services/sop/internal/operations.ts — GOOD
+import { deleteSopDocumentRow } from "./mutations";
+
+export async function deleteSopDocument(id: string): Promise<void> {
+  const deleted = await deleteSopDocumentRow(id);
+  if (deleted) {
+    await unlink(deleted.storagePath);
+  }
+}
+```
+
+Now the orchestrator reads top-to-bottom in domain language. The test
+mocks `deleteSopDocumentRow` (one function, two return shapes:
+`{ storagePath }` or `null`) instead of a Prisma client. The Prisma
+error class lives in exactly one place — the mutation file that owns
+the write.
+
+The same shape applies to multi-step writes: if `ingestSopDocument`
+needs to atomically clear chunks, insert new chunks with embeddings,
+and mark a document `READY`, that whole `$transaction` is a single
+mutation function (`replaceSopChunks(documentId, chunksWithEmbeddings)`
+or similar), not an inline transaction block in the orchestrator.
+
+### Enforcement
+
+This rule is mechanically enforced by an ESLint `no-restricted-imports`
+rule scoped to `services/**`:
+
+- `@prisma/client` and `getPrismaClient` from `@/services/database` are
+  forbidden imports.
+- The allowlist is exactly `services/**/internal/queries.ts`,
+  `services/**/internal/mutations.ts`, and `services/database/**`.
+
+If lint fires, the fix is to move the database call into the colocated
+`queries.ts` / `mutations.ts` and import the resulting function into
+the orchestrator. Adding a file-level eslint-disable to suppress the
+rule is not an acceptable resolution — it defeats the discipline the
+rule exists to maintain.
+
 ## Consequences
 
 - Business logic is insulated from the chosen database library.
