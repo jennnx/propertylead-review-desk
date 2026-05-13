@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createHmacSignature } from "@/lib/hmac-signature";
 import { importWithRequiredEnv } from "@/tests/env";
@@ -28,6 +28,12 @@ describe("HubSpot Webhooks service", () => {
     createMany.mockReset();
     findMany.mockReset();
     enqueueQueueJobWithRetries.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Number("1710000000000") + 1_000));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("records contact creation HubSpot Webhook Events as new work for the worker", async () => {
@@ -67,7 +73,6 @@ describe("HubSpot Webhooks service", () => {
       signature,
       timestamp,
       webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-      now: new Date(Number(timestamp) + 1_000),
     });
 
     expect(receipt.acceptedEventCount).toBe(1);
@@ -138,7 +143,6 @@ describe("HubSpot Webhooks service", () => {
       signature,
       timestamp,
       webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-      now: new Date(Number(timestamp) + 1_000),
     });
 
     expect(receipt.persistedEventCount).toBe(1);
@@ -200,7 +204,6 @@ describe("HubSpot Webhooks service", () => {
       signature,
       timestamp,
       webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-      now: new Date(Number(timestamp) + 1_000),
     });
 
     expect(receipt.acceptedEventCount).toBe(3);
@@ -245,7 +248,6 @@ describe("HubSpot Webhooks service", () => {
       signature,
       timestamp,
       webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-      now: new Date(Number(timestamp) + 1_000),
     });
 
     expect(receipt.persistedEventCount).toBe(0);
@@ -311,8 +313,7 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toThrow("redis unavailable");
     expect(enqueueQueueJobWithRetries).toHaveBeenCalledTimes(1);
   });
@@ -363,7 +364,6 @@ describe("HubSpot Webhooks service", () => {
       signature,
       timestamp,
       webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-      now: new Date(Number(timestamp) + 1_000),
     });
 
     expect(receipt.events).toEqual(rawEvents);
@@ -391,8 +391,7 @@ describe("HubSpot Webhooks service", () => {
         signature: null,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "unauthorized",
@@ -418,8 +417,7 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp: null,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "unauthorized",
@@ -445,8 +443,7 @@ describe("HubSpot Webhooks service", () => {
         signature: wrongSignature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "unauthorized",
@@ -464,6 +461,7 @@ describe("HubSpot Webhooks service", () => {
       source: `POSThttps://desk.example.com/api/hubspot/webhook${rawBody}${timestamp}`,
     });
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.setSystemTime(new Date(Number(timestamp) + 5 * 60 * 1000 + 1));
 
     await expect(
       receiveHubSpotWebhookBatch({
@@ -472,7 +470,6 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 5 * 60 * 1000 + 1),
       }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
@@ -499,8 +496,7 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "bad_request",
@@ -526,8 +522,7 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "bad_request",
@@ -553,8 +548,7 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "bad_request",
@@ -580,8 +574,7 @@ describe("HubSpot Webhooks service", () => {
         signature,
         timestamp,
         webhookUrl: "https://desk.example.com/api/hubspot/webhook",
-        now: new Date(Number(timestamp) + 1_000),
-      }),
+        }),
     ).rejects.toMatchObject({
       constructor: HubSpotWebhookReceiptError,
       reason: "bad_request",
