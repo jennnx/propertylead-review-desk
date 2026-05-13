@@ -11,6 +11,7 @@ import { verifyWritableHubSpotPropertyCatalogOnBoot } from "../services/hubspot"
 import { QUEUE_NAMES, createWorker, type Worker } from "../services/queue";
 import { processHubSpotWebhookProcess } from "./jobs/hubspot-webhook-process";
 import { disconnectProbeRedis, processInfraSmoke } from "./jobs/infra-smoke";
+import { processSopIngest } from "./jobs/sop-ingest";
 
 // BullMQ's `Worker` is contravariant in its `NameType` generic, so a
 // `Worker<_, _, "infra.smoke">` is not assignable to `Worker<_, _, string>`.
@@ -56,7 +57,26 @@ function registerWorkers(): AnyWorker[] {
     console.error(`worker[${infraSmokeName}]: error:`, err);
   });
 
-  return [hubSpotWebhook as AnyWorker, infraSmoke as AnyWorker];
+  const sopIngestName = QUEUE_NAMES.SOP_INGEST;
+  const sopIngest = createWorker(sopIngestName, processSopIngest);
+  sopIngest.on("ready", () => {
+    console.log(`worker[${sopIngestName}]: ready`);
+  });
+  sopIngest.on("completed", (job) => {
+    console.log(`worker[${sopIngestName}]: job ${job.id} completed`);
+  });
+  sopIngest.on("failed", (job, err) => {
+    console.error(`worker[${sopIngestName}]: job ${job?.id ?? "?"} failed:`, err);
+  });
+  sopIngest.on("error", (err) => {
+    console.error(`worker[${sopIngestName}]: error:`, err);
+  });
+
+  return [
+    hubSpotWebhook as AnyWorker,
+    infraSmoke as AnyWorker,
+    sopIngest as AnyWorker,
+  ];
 }
 
 async function shutdown(workers: AnyWorker[], signal: string): Promise<void> {
