@@ -1,6 +1,7 @@
 import type { SopDocumentSummary } from "@/services/sop";
 import { listSopDocuments } from "@/services/sop";
 
+import { SopDocumentDeleteButton } from "./SopDocumentDeleteButton";
 import { SopUploadForm } from "./SopUploadForm";
 
 export default async function SopsPage() {
@@ -50,6 +51,7 @@ function SopDocumentsTable({
             <th className="px-3 py-2">Status</th>
             <th className="px-3 py-2 text-right">Chunks</th>
             <th className="px-3 py-2">Failure</th>
+            <th className="px-3 py-2 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -73,6 +75,12 @@ function SopDocumentsTable({
                 {document.processingStatus === "FAILED"
                   ? document.failureMessage
                   : "-"}
+              </td>
+              <td className="px-3 py-3 text-right">
+                <SopDocumentDeleteButton
+                  sopDocumentId={document.id}
+                  originalFilename={document.originalFilename}
+                />
               </td>
             </tr>
           ))}

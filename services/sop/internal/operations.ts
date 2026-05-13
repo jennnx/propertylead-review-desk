@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { Prisma } from "@prisma/client";
+
 import { env } from "@/lib/env";
 import { getPrismaClient } from "@/services/database";
 import { QUEUE_NAMES, enqueueQueueJobWithRetries } from "@/services/queue";
@@ -108,8 +110,28 @@ export async function getSopDocument(id: string): Promise<SopDocument | null> {
 }
 
 export async function deleteSopDocument(id: string): Promise<void> {
-  void id;
-  return notImplemented();
+  let storagePath: string;
+  try {
+    const document = await getPrismaClient().sopDocument.delete({
+      where: { id },
+      select: { storagePath: true },
+    });
+    storagePath = document.storagePath;
+  } catch (error) {
+    if (isPrismaRecordNotFoundError(error)) {
+      return;
+    }
+    throw error;
+  }
+
+  await removeStoredFileIfPresent(storagePath);
+}
+
+function isPrismaRecordNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2025"
+  );
 }
 
 function validateUpload(input: UploadSopDocumentInput): void {
