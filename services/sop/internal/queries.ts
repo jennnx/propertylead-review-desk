@@ -20,9 +20,11 @@ export async function findMostSimilarSopChunks(
   const vectorLiteral = `[${queryEmbedding.join(",")}]`;
 
   const rows = await getPrismaClient().$queryRaw`
-    SELECT id, "sopDocumentId", ordinal, text
-    FROM "sop_chunks"
-    ORDER BY "embedding" <=> ${vectorLiteral}::vector
+    SELECT c.id, c."sopDocumentId", c.ordinal, c.text
+    FROM "sop_chunks" c
+    JOIN "sop_documents" d ON d.id = c."sopDocumentId"
+    WHERE d."processingStatus" = 'ready'::"SopDocumentProcessingStatus"
+    ORDER BY c."embedding" <=> ${vectorLiteral}::vector
     LIMIT ${k}
   `;
 

@@ -11,3 +11,7 @@ export {
   type SopDocumentSummary,
   type SopDocument,
 } from "./internal/operations";
+export {
+  processSopIngestionJob,
+  type ProcessSopIngestionJobInput,
+} from "./internal/ingestion";
