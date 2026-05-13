@@ -17,6 +17,8 @@ For environment schema tests, do not add one test per env var. Keep one represen
 We use vertical services and deep slices as the default architecture.
 `docs/adr/0008-vertical-services-and-deep-slices.md` is required reading before changing product or service code.
 
+Service orchestration files (`operations.ts`, `ingestion.ts`, `processing.ts`, `handle-*.ts`) must not import `getPrismaClient` from `@/services/database` or import from `@prisma/client`. All database access lives in colocated `queries.ts` (reads) and `mutations.ts` (writes). `docs/adr/0009-colocated-service-data-access-layers.md` is required reading; the **Failure mode** and **Resolution** sections show the exact anti-pattern and the fix.
+
 # Components
 
 This project uses shadcn/ui for components. The `components/ui` folder contains basic UI building blocks, and agents may add more shadcn/ui components there as needed. Refer to the shadcn skill before creating, modifying, or adding components.

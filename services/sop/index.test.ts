@@ -16,6 +16,7 @@ const sopDocumentCreate = vi.fn();
 const sopDocumentFindMany = vi.fn();
 const sopDocumentFindUnique = vi.fn();
 const sopDocumentUpdate = vi.fn();
+const sopDocumentDelete = vi.fn();
 const sopChunkDeleteMany = vi.fn();
 const queryRaw = vi.fn();
 const executeRaw = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("@/services/database", () => ({
       findMany: sopDocumentFindMany,
       findUnique: sopDocumentFindUnique,
       update: sopDocumentUpdate,
+      delete: sopDocumentDelete,
     },
     sopChunk: {
       deleteMany: sopChunkDeleteMany,
@@ -77,6 +79,7 @@ describe("SOP service", () => {
     sopDocumentFindMany.mockReset();
     sopDocumentFindUnique.mockReset();
     sopDocumentUpdate.mockReset();
+    sopDocumentDelete.mockReset();
     sopChunkDeleteMany.mockReset();
     queryRaw.mockReset();
     executeRaw.mockReset();
@@ -619,14 +622,102 @@ describe("SOP service", () => {
     });
   });
 
-  test("keeps delete unavailable until the deletion slice lands", async () => {
-    const { deleteSopDocument } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+  describe("deleteSopDocument", () => {
+    test("removes a READY SOP Document row and its stored file bytes, relying on the schema cascade for chunks", async () => {
+      const storageDir = "/tmp/propertylead-review-desk/sops";
+      const storagePath = `${storageDir}/doc-ready-delete`;
+      await import("node:fs/promises").then(async (fs) => {
+        await fs.mkdir(storageDir, { recursive: true });
+        await fs.writeFile(storagePath, "Call hot seller leads within five minutes.");
+      });
+      sopDocumentDelete.mockResolvedValue({ storagePath });
+      const { deleteSopDocument } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
 
-    await expect(deleteSopDocument("sop-doc-1")).rejects.toThrow(
-      "not implemented",
-    );
+      await expect(deleteSopDocument("doc-ready-delete")).resolves.toBeUndefined();
+
+      expect(sopDocumentDelete).toHaveBeenCalledWith({
+        where: { id: "doc-ready-delete" },
+        select: { storagePath: true },
+      });
+      expect(sopChunkDeleteMany).not.toHaveBeenCalled();
+      await expect(
+        import("node:fs/promises").then((fs) => fs.access(storagePath)),
+      ).rejects.toThrow();
+    });
+
+    test("deletes a PROCESSING SOP Document the same way as READY, leaving the cascade to clean any racing chunks", async () => {
+      const storageDir = "/tmp/propertylead-review-desk/sops";
+      const storagePath = `${storageDir}/doc-processing-delete`;
+      await import("node:fs/promises").then(async (fs) => {
+        await fs.mkdir(storageDir, { recursive: true });
+        await fs.writeFile(storagePath, "Half-ingested playbook bytes.");
+      });
+      sopDocumentDelete.mockResolvedValue({ storagePath });
+      const { deleteSopDocument } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      await expect(
+        deleteSopDocument("doc-processing-delete"),
+      ).resolves.toBeUndefined();
+
+      expect(sopDocumentDelete).toHaveBeenCalledWith({
+        where: { id: "doc-processing-delete" },
+        select: { storagePath: true },
+      });
+      expect(sopDocumentFindUnique).not.toHaveBeenCalled();
+      expect(sopChunkDeleteMany).not.toHaveBeenCalled();
+      await expect(
+        import("node:fs/promises").then((fs) => fs.access(storagePath)),
+      ).rejects.toThrow();
+    });
+
+    test("is a clear no-op when the SOP Document id does not exist (chosen behavior)", async () => {
+      const { Prisma } = await import("@prisma/client");
+      const notFound = new Prisma.PrismaClientKnownRequestError(
+        "Record to delete does not exist.",
+        { code: "P2025", clientVersion: "test" },
+      );
+      sopDocumentDelete.mockRejectedValue(notFound);
+      const { deleteSopDocument } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      await expect(
+        deleteSopDocument("does-not-exist"),
+      ).resolves.toBeUndefined();
+
+      expect(sopDocumentDelete).toHaveBeenCalledWith({
+        where: { id: "does-not-exist" },
+        select: { storagePath: true },
+      });
+    });
+
+    test("tolerates an already-missing stored file (ENOENT) after the row delete succeeds", async () => {
+      const storagePath =
+        "/tmp/propertylead-review-desk/sops/doc-missing-file-delete";
+      sopDocumentDelete.mockResolvedValue({ storagePath });
+      const { deleteSopDocument } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      await expect(
+        deleteSopDocument("doc-missing-file-delete"),
+      ).resolves.toBeUndefined();
+    });
+
+    test("propagates unexpected errors from the row delete without touching storage", async () => {
+      sopDocumentDelete.mockRejectedValue(new Error("connection refused"));
+      const { deleteSopDocument } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      await expect(deleteSopDocument("doc-error")).rejects.toThrow(
+        "connection refused",
+      );
+    });
   });
 
   describe("retrieveRelevantSopChunks", () => {
