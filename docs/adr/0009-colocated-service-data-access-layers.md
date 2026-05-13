@@ -54,6 +54,11 @@ Rules:
   plain results. They should not accept route/framework objects.
 - Query and mutation functions do not decide product policy. They perform the
   read or write requested by the caller.
+- Query functions that return data from `$queryRaw` must parse the result
+  through a Zod schema before returning it. `$queryRaw<T>` is only a
+  TypeScript assertion; the schema is the runtime contract. Generated
+  Prisma model methods (`findMany`, `findUnique`, etc.) already enforce
+  their own runtime shape and do not need an extra Zod pass.
 - Orchestration belongs in business-logic files. For example, "create a ticket,
   then write an audit log entry" is the caller's responsibility; each mutation
   only knows how to perform its own write.

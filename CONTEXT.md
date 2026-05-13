@@ -32,7 +32,7 @@ The `index.ts` file is the public API. Everything under `internal/` is private i
 
 Route files, Server Actions, Route Handlers, scripts, and workers should be thin adapters around service APIs. They parse framework inputs, authorize, call services, revalidate or respond, and then stop. Business policy belongs in services, not in `page.tsx`, UI components, route handlers, scripts, or worker entrypoints.
 
-Use Zod schemas for runtime validation of complicated objects at service boundaries, especially stored JSON, webhook payloads, provider responses, and AI outputs. Prefer schema `parse` or `safeParse` over hand-rolled property checks so validation, type inference, and future object-shape changes stay together.
+Use Zod schemas for runtime validation of complicated objects at every service boundary: stored JSON, webhook payloads, provider responses, AI outputs (including tool-use call arguments returned by Claude), and raw SQL rows from `$queryRaw` (whose generic argument is only a TypeScript assertion, not runtime validation). Prefer schema `parse` or `safeParse` over hand-rolled property checks so validation, type inference, and future object-shape changes stay together. Never define a Zod schema alongside a parallel hand-rolled type — export types via `z.infer<typeof ...>` (and `Extract<...>` where you need a narrowed branch) so the schema is the single source of truth. Push cross-field business rules into `superRefine` and normalize the output shape with `.transform` rather than running imperative checks after `parse`, so the schema captures the full contract in one place.
 
 `lib/` is only for small generic utilities reused everywhere by design, such as `env` and `utils`. It is not where product capabilities should accumulate.
 
