@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type {
@@ -7,6 +6,8 @@ import type {
   HubSpotConversationThreadMessages,
 } from "@/services/hubspot";
 import { importWithRequiredEnv } from "@/tests/env";
+
+import { PRISMA_DB_NULL } from "./internal/mutations";
 
 const upsert = vi.fn();
 const update = vi.fn();
@@ -146,7 +147,7 @@ describe("HubSpot workflows service", () => {
       update: {
         status: "IN_PROGRESS",
         outcome: null,
-        enrichmentInputContext: Prisma.DbNull,
+        enrichmentInputContext: PRISMA_DB_NULL,
         failureMessage: null,
         completedAt: null,
       },
@@ -802,7 +803,7 @@ describe("HubSpot workflows service", () => {
       .map((call) => call[0])
       .find((arg) => arg?.data?.writebackPlanInput !== undefined);
     expect(writebackUpdate).toBeDefined();
-    expect(writebackUpdate?.data?.writebackPlan).toBe(Prisma.DbNull);
+    expect(writebackUpdate?.data?.writebackPlan).toBe(PRISMA_DB_NULL);
     expect(
       (writebackUpdate?.data?.writebackPlanValidations as unknown[]).every(
         (v) => (v as { ok?: boolean }).ok === false,
@@ -1101,7 +1102,7 @@ describe("HubSpot workflows service", () => {
     const writebackUpdate = update.mock.calls
       .map((call) => call[0])
       .find((arg) => arg?.data?.writebackPlanInput !== undefined);
-    expect(writebackUpdate?.data?.writebackPlan).toBe(Prisma.DbNull);
+    expect(writebackUpdate?.data?.writebackPlan).toBe(PRISMA_DB_NULL);
     expect(
       (writebackUpdate?.data?.writebackPlanRawOutputs as unknown[]).length,
     ).toBe(2);

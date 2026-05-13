@@ -2,12 +2,18 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
-import { getPrismaClient } from "@/services/database";
 import { QUEUE_NAMES, enqueueQueueJobWithRetries } from "@/services/queue";
+
+import {
+  deleteSopDocumentRow,
+  markSopDocumentFailed,
+  recordSopDocumentUpload,
+  type SopDocumentRow,
+} from "./mutations";
+import { listRecentSopDocuments } from "./queries";
 
 const MAX_SOP_UPLOAD_BYTES = 10 * 1024 * 1024;
 
@@ -92,16 +98,12 @@ export async function uploadSopDocument(
 
   const id = randomUUID();
   const storagePath = path.join(env.SOP_STORAGE_DIR, id);
-  const document = await getPrismaClient().sopDocument.create({
-    data: {
-      id,
-      originalFilename: input.originalFilename,
-      contentType: input.contentType,
-      byteSize: input.byteSize,
-      storagePath,
-      processingStatus: "PROCESSING",
-      failureMessage: null,
-    },
+  const document = await recordSopDocumentUpload({
+    id,
+    originalFilename: input.originalFilename,
+    contentType: input.contentType,
+    byteSize: input.byteSize,
+    storagePath,
   });
 
   try {
@@ -119,7 +121,7 @@ export async function uploadSopDocument(
       },
     });
   } catch (error) {
-    await markUploadFailed(document.id, toFailureMessage(error));
+    await markSopDocumentFailed(document.id, toFailureMessage(error));
     await removeStoredFileIfPresent(storagePath);
     throw error;
   }
@@ -128,28 +130,7 @@ export async function uploadSopDocument(
 }
 
 export async function listSopDocuments(): Promise<SopDocumentSummary[]> {
-  const documents = await getPrismaClient().sopDocument.findMany({
-    orderBy: {
-      uploadedAt: "desc",
-    },
-    take: 50,
-    include: {
-      _count: {
-        select: {
-          chunks: true,
-        },
-      },
-    },
-  });
-
-  return documents.map((document) => {
-    const { storagePath: _storagePath, _count, ...summary } = document;
-    void _storagePath;
-    return {
-      ...summary,
-      chunkCount: _count.chunks,
-    };
-  });
+  return listRecentSopDocuments(50);
 }
 
 export async function getSopDocument(id: string): Promise<SopDocument | null> {
@@ -158,28 +139,10 @@ export async function getSopDocument(id: string): Promise<SopDocument | null> {
 }
 
 export async function deleteSopDocument(id: string): Promise<void> {
-  let storagePath: string;
-  try {
-    const document = await getPrismaClient().sopDocument.delete({
-      where: { id },
-      select: { storagePath: true },
-    });
-    storagePath = document.storagePath;
-  } catch (error) {
-    if (isPrismaRecordNotFoundError(error)) {
-      return;
-    }
-    throw error;
+  const deleted = await deleteSopDocumentRow(id);
+  if (deleted) {
+    await removeStoredFileIfPresent(deleted.storagePath);
   }
-
-  await removeStoredFileIfPresent(storagePath);
-}
-
-function isPrismaRecordNotFoundError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2025"
-  );
 }
 
 function validateUpload(input: UploadSopDocumentInput): void {
@@ -191,7 +154,7 @@ function validateUpload(input: UploadSopDocumentInput): void {
 }
 
 function mapDocument(
-  document: Omit<SopDocument, "chunkCount">,
+  document: SopDocumentRow,
   chunkCount: number,
 ): SopDocument {
   return {
@@ -205,21 +168,6 @@ function mapDocument(
     failureMessage: document.failureMessage,
     chunkCount,
   };
-}
-
-async function markUploadFailed(
-  sopDocumentId: string,
-  failureMessage: string,
-): Promise<void> {
-  await getPrismaClient().sopDocument.update({
-    where: {
-      id: sopDocumentId,
-    },
-    data: {
-      processingStatus: "FAILED",
-      failureMessage,
-    },
-  });
 }
 
 async function removeStoredFileIfPresent(storagePath: string): Promise<void> {

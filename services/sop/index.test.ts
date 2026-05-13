@@ -12,33 +12,26 @@ const PDF_FIXTURE_PATH = path.join(
   "sample.pdf",
 );
 
-const sopDocumentCreate = vi.fn();
-const sopDocumentFindMany = vi.fn();
-const sopDocumentFindUnique = vi.fn();
-const sopDocumentUpdate = vi.fn();
-const sopDocumentDelete = vi.fn();
-const sopChunkDeleteMany = vi.fn();
-const queryRaw = vi.fn();
-const executeRaw = vi.fn();
-const transaction = vi.fn();
+const recordSopDocumentUpload = vi.fn();
+const markSopDocumentFailed = vi.fn();
+const replaceSopChunks = vi.fn();
+const deleteSopDocumentRow = vi.fn();
+const findSopDocumentById = vi.fn();
+const listRecentSopDocuments = vi.fn();
+const findMostSimilarSopChunks = vi.fn();
 const enqueueQueueJobWithRetries = vi.fn();
 
-vi.mock("@/services/database", () => ({
-  getPrismaClient: () => ({
-    sopDocument: {
-      create: sopDocumentCreate,
-      findMany: sopDocumentFindMany,
-      findUnique: sopDocumentFindUnique,
-      update: sopDocumentUpdate,
-      delete: sopDocumentDelete,
-    },
-    sopChunk: {
-      deleteMany: sopChunkDeleteMany,
-    },
-    $queryRaw: queryRaw,
-    $executeRaw: executeRaw,
-    $transaction: transaction,
-  }),
+vi.mock("./internal/mutations", () => ({
+  recordSopDocumentUpload,
+  markSopDocumentFailed,
+  replaceSopChunks,
+  deleteSopDocumentRow,
+}));
+
+vi.mock("./internal/queries", () => ({
+  findSopDocumentById,
+  listRecentSopDocuments,
+  findMostSimilarSopChunks,
 }));
 
 vi.mock("@/services/queue", () => ({
@@ -75,26 +68,13 @@ function stubVoyageEmbedding(embedding: number[] = new Array(1024).fill(0.01)) {
 
 describe("SOP service", () => {
   beforeEach(() => {
-    sopDocumentCreate.mockReset();
-    sopDocumentFindMany.mockReset();
-    sopDocumentFindUnique.mockReset();
-    sopDocumentUpdate.mockReset();
-    sopDocumentDelete.mockReset();
-    sopChunkDeleteMany.mockReset();
-    queryRaw.mockReset();
-    executeRaw.mockReset();
-    transaction.mockReset();
-    transaction.mockImplementation((callback) =>
-      callback({
-        sopDocument: {
-          update: sopDocumentUpdate,
-        },
-        sopChunk: {
-          deleteMany: sopChunkDeleteMany,
-        },
-        $executeRaw: executeRaw,
-      }),
-    );
+    recordSopDocumentUpload.mockReset();
+    markSopDocumentFailed.mockReset();
+    replaceSopChunks.mockReset();
+    deleteSopDocumentRow.mockReset();
+    findSopDocumentById.mockReset();
+    listRecentSopDocuments.mockReset();
+    findMostSimilarSopChunks.mockReset();
     enqueueQueueJobWithRetries.mockReset();
   });
 
@@ -108,10 +88,11 @@ describe("SOP service", () => {
     expect(sop.retrieveRelevantSopChunks).toEqual(expect.any(Function));
   });
 
-  test("uploads a plain-text SOP Document by creating a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
-    sopDocumentCreate.mockImplementation(async ({ data }) => ({
-      ...data,
+  test("uploads a plain-text SOP Document by recording a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
+    recordSopDocumentUpload.mockImplementation(async (input) => ({
+      ...input,
       uploadedAt: new Date("2026-05-13T16:00:00.000Z"),
+      processingStatus: "PROCESSING",
       failureMessage: null,
     }));
     const { uploadSopDocument } = await importWithRequiredEnv(() =>
@@ -125,14 +106,12 @@ describe("SOP service", () => {
       body: Buffer.from("Call every hot lead twice"),
     });
 
-    expect(sopDocumentCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        originalFilename: "listing-follow-up.txt",
-        contentType: "text/plain",
-        byteSize: 24,
-        processingStatus: "PROCESSING",
-        failureMessage: null,
-      }),
+    expect(recordSopDocumentUpload).toHaveBeenCalledWith({
+      id: document.id,
+      originalFilename: "listing-follow-up.txt",
+      contentType: "text/plain",
+      byteSize: 24,
+      storagePath: document.storagePath,
     });
     expect(document).toEqual(
       expect.objectContaining({
@@ -176,14 +155,15 @@ describe("SOP service", () => {
       }),
     ).rejects.toThrow(/10 MB or smaller/);
 
-    expect(sopDocumentCreate).not.toHaveBeenCalled();
+    expect(recordSopDocumentUpload).not.toHaveBeenCalled();
     expect(enqueueQueueJobWithRetries).not.toHaveBeenCalled();
   });
 
-  test("uploads a Markdown SOP Document by creating a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
-    sopDocumentCreate.mockImplementation(async ({ data }) => ({
-      ...data,
+  test("uploads a Markdown SOP Document by recording a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
+    recordSopDocumentUpload.mockImplementation(async (input) => ({
+      ...input,
       uploadedAt: new Date("2026-05-13T16:00:00.000Z"),
+      processingStatus: "PROCESSING",
       failureMessage: null,
     }));
     const { uploadSopDocument } = await importWithRequiredEnv(() =>
@@ -197,14 +177,12 @@ describe("SOP service", () => {
       body: Buffer.from("# Seller Playbook\n\nCall fast."),
     });
 
-    expect(sopDocumentCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(recordSopDocumentUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
         originalFilename: "seller-playbook.md",
         contentType: "text/markdown",
-        processingStatus: "PROCESSING",
-        failureMessage: null,
       }),
-    });
+    );
     expect(document.contentType).toBe("text/markdown");
     await expect(
       import("node:fs/promises").then((fs) => fs.readFile(document.storagePath, "utf8")),
@@ -217,10 +195,11 @@ describe("SOP service", () => {
     );
   });
 
-  test("uploads a PDF SOP Document by creating a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
-    sopDocumentCreate.mockImplementation(async ({ data }) => ({
-      ...data,
+  test("uploads a PDF SOP Document by recording a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
+    recordSopDocumentUpload.mockImplementation(async (input) => ({
+      ...input,
       uploadedAt: new Date("2026-05-13T16:00:00.000Z"),
+      processingStatus: "PROCESSING",
       failureMessage: null,
     }));
     const pdfBytes = await readFile(PDF_FIXTURE_PATH);
@@ -235,15 +214,13 @@ describe("SOP service", () => {
       body: pdfBytes,
     });
 
-    expect(sopDocumentCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(recordSopDocumentUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
         originalFilename: "seller-playbook.pdf",
         contentType: "application/pdf",
         byteSize: pdfBytes.byteLength,
-        processingStatus: "PROCESSING",
-        failureMessage: null,
       }),
-    });
+    );
     expect(document.contentType).toBe("application/pdf");
     await expect(
       import("node:fs/promises").then((fs) => fs.readFile(document.storagePath)),
@@ -270,7 +247,7 @@ describe("SOP service", () => {
       }),
     ).rejects.toThrow(/text\/plain.*text\/markdown.*application\/pdf/);
 
-    expect(sopDocumentCreate).not.toHaveBeenCalled();
+    expect(recordSopDocumentUpload).not.toHaveBeenCalled();
     expect(enqueueQueueJobWithRetries).not.toHaveBeenCalled();
   });
 
@@ -288,14 +265,15 @@ describe("SOP service", () => {
       }),
     ).rejects.toThrow(/\.txt.*\.md.*\.pdf/);
 
-    expect(sopDocumentCreate).not.toHaveBeenCalled();
+    expect(recordSopDocumentUpload).not.toHaveBeenCalled();
     expect(enqueueQueueJobWithRetries).not.toHaveBeenCalled();
   });
 
   test("marks an SOP Document FAILED and removes stored bytes when enqueue fails after upload persistence", async () => {
-    sopDocumentCreate.mockImplementation(async ({ data }) => ({
-      ...data,
+    recordSopDocumentUpload.mockImplementation(async (input) => ({
+      ...input,
       uploadedAt: new Date("2026-05-13T16:00:00.000Z"),
+      processingStatus: "PROCESSING",
       failureMessage: null,
     }));
     enqueueQueueJobWithRetries.mockRejectedValue(new Error("redis unavailable"));
@@ -311,49 +289,35 @@ describe("SOP service", () => {
     });
 
     await expect(upload).rejects.toThrow("redis unavailable");
-    const documentId = sopDocumentCreate.mock.calls[0][0].data.id;
+    const documentId = recordSopDocumentUpload.mock.calls[0][0].id;
     const storagePath = `${process.env.SOP_STORAGE_DIR}/${documentId}`;
-    expect(sopDocumentUpdate).toHaveBeenCalledWith({
-      where: {
-        id: documentId,
-      },
-      data: {
-        processingStatus: "FAILED",
-        failureMessage: "redis unavailable",
-      },
-    });
+    expect(markSopDocumentFailed).toHaveBeenCalledWith(documentId, "redis unavailable");
     await expect(
       import("node:fs/promises").then((fs) => fs.access(storagePath)),
     ).rejects.toThrow();
   });
 
   test("lists recent SOP Documents with processing status and chunk counts", async () => {
-    sopDocumentFindMany.mockResolvedValue([
+    listRecentSopDocuments.mockResolvedValue([
       {
         id: "doc-ready",
         originalFilename: "buyer-playbook.txt",
         contentType: "text/plain",
         byteSize: 2048,
-        storagePath: "/tmp/sops/doc-ready",
         uploadedAt: new Date("2026-05-13T15:00:00.000Z"),
         processingStatus: "READY",
         failureMessage: null,
-        _count: {
-          chunks: 3,
-        },
+        chunkCount: 3,
       },
       {
         id: "doc-failed",
         originalFilename: "empty.txt",
         contentType: "text/plain",
         byteSize: 0,
-        storagePath: "/tmp/sops/doc-failed",
         uploadedAt: new Date("2026-05-13T14:00:00.000Z"),
         processingStatus: "FAILED",
         failureMessage: "SOP Document did not contain any text.",
-        _count: {
-          chunks: 0,
-        },
+        chunkCount: 0,
       },
     ]);
     const { listSopDocuments } = await importWithRequiredEnv(() =>
@@ -382,19 +346,7 @@ describe("SOP service", () => {
         chunkCount: 0,
       },
     ]);
-    expect(sopDocumentFindMany).toHaveBeenCalledWith({
-      orderBy: {
-        uploadedAt: "desc",
-      },
-      take: 50,
-      include: {
-        _count: {
-          select: {
-            chunks: true,
-          },
-        },
-      },
-    });
+    expect(listRecentSopDocuments).toHaveBeenCalledWith(50);
   });
 
   test("processes a stored TXT SOP Document into READY chunks", async () => {
@@ -407,7 +359,7 @@ describe("SOP service", () => {
         "Call hot seller leads within five minutes.\n\nFollow up twice the first day.",
       );
     });
-    sopDocumentFindUnique.mockResolvedValue({
+    findSopDocumentById.mockResolvedValue({
       id: "doc-success",
       originalFilename: "seller-playbook.txt",
       contentType: "text/plain",
@@ -417,8 +369,7 @@ describe("SOP service", () => {
       processingStatus: "PROCESSING",
       failureMessage: null,
     });
-    sopDocumentUpdate.mockResolvedValue({});
-    executeRaw.mockResolvedValue(1);
+    replaceSopChunks.mockResolvedValue(undefined);
     const fetch = stubVoyageEmbedding(new Array(1024).fill(0.02));
     const { processSopIngestionJob } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -440,21 +391,14 @@ describe("SOP service", () => {
         }),
       }),
     );
-    expect(executeRaw).toHaveBeenCalledTimes(1);
-    expect(sopChunkDeleteMany).toHaveBeenCalledWith({
-      where: {
-        sopDocumentId: "doc-success",
+    expect(replaceSopChunks).toHaveBeenCalledWith("doc-success", [
+      {
+        ordinal: 0,
+        text: "Call hot seller leads within five minutes.\n\nFollow up twice the first day.",
+        embedding: new Array(1024).fill(0.02),
       },
-    });
-    expect(sopDocumentUpdate).toHaveBeenCalledWith({
-      where: {
-        id: "doc-success",
-      },
-      data: {
-        processingStatus: "READY",
-        failureMessage: null,
-      },
-    });
+    ]);
+    expect(markSopDocumentFailed).not.toHaveBeenCalled();
   });
 
   test("marks the SOP Document FAILED when TXT parsing produces no text", async () => {
@@ -464,7 +408,7 @@ describe("SOP service", () => {
       await fs.mkdir(storageDir, { recursive: true });
       await fs.writeFile(storagePath, "  \n\n  ");
     });
-    sopDocumentFindUnique.mockResolvedValue({
+    findSopDocumentById.mockResolvedValue({
       id: "doc-empty",
       originalFilename: "empty.txt",
       contentType: "text/plain",
@@ -474,7 +418,6 @@ describe("SOP service", () => {
       processingStatus: "PROCESSING",
       failureMessage: null,
     });
-    sopDocumentUpdate.mockResolvedValue({});
     const fetch = stubVoyageEmbedding();
     const { processSopIngestionJob } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -485,16 +428,11 @@ describe("SOP service", () => {
     ).rejects.toThrow("SOP Document did not contain any text.");
 
     expect(fetch).not.toHaveBeenCalled();
-    expect(executeRaw).not.toHaveBeenCalled();
-    expect(sopDocumentUpdate).toHaveBeenCalledWith({
-      where: {
-        id: "doc-empty",
-      },
-      data: {
-        processingStatus: "FAILED",
-        failureMessage: "SOP Document did not contain any text.",
-      },
-    });
+    expect(replaceSopChunks).not.toHaveBeenCalled();
+    expect(markSopDocumentFailed).toHaveBeenCalledWith(
+      "doc-empty",
+      "SOP Document did not contain any text.",
+    );
   });
 
   test("processes a stored PDF SOP Document into READY chunks using the unpdf parsing seam", async () => {
@@ -505,7 +443,7 @@ describe("SOP service", () => {
       await fs.mkdir(storageDir, { recursive: true });
       await fs.writeFile(storagePath, fixtureBytes);
     });
-    sopDocumentFindUnique.mockResolvedValue({
+    findSopDocumentById.mockResolvedValue({
       id: "doc-pdf-success",
       originalFilename: "seller-playbook.pdf",
       contentType: "application/pdf",
@@ -515,8 +453,7 @@ describe("SOP service", () => {
       processingStatus: "PROCESSING",
       failureMessage: null,
     });
-    sopDocumentUpdate.mockResolvedValue({});
-    executeRaw.mockResolvedValue(1);
+    replaceSopChunks.mockResolvedValue(undefined);
     stubVoyageEmbedding(new Array(1024).fill(0.03));
     const { processSopIngestionJob } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -526,17 +463,17 @@ describe("SOP service", () => {
       processSopIngestionJob({ sopDocumentId: "doc-pdf-success" }),
     ).resolves.toBeUndefined();
 
-    expect(executeRaw).toHaveBeenCalled();
-    expect(sopChunkDeleteMany).toHaveBeenCalledWith({
-      where: { sopDocumentId: "doc-pdf-success" },
-    });
-    expect(sopDocumentUpdate).toHaveBeenCalledWith({
-      where: { id: "doc-pdf-success" },
-      data: {
-        processingStatus: "READY",
-        failureMessage: null,
-      },
-    });
+    expect(replaceSopChunks).toHaveBeenCalledWith(
+      "doc-pdf-success",
+      expect.arrayContaining([
+        expect.objectContaining({
+          ordinal: expect.any(Number),
+          text: expect.any(String),
+          embedding: new Array(1024).fill(0.03),
+        }),
+      ]),
+    );
+    expect(markSopDocumentFailed).not.toHaveBeenCalled();
   });
 
   test("marks the SOP Document FAILED with a descriptive message when the PDF cannot be parsed", async () => {
@@ -546,7 +483,7 @@ describe("SOP service", () => {
       await fs.mkdir(storageDir, { recursive: true });
       await fs.writeFile(storagePath, "this is not actually a pdf file");
     });
-    sopDocumentFindUnique.mockResolvedValue({
+    findSopDocumentById.mockResolvedValue({
       id: "doc-pdf-corrupt",
       originalFilename: "corrupt.pdf",
       contentType: "application/pdf",
@@ -556,7 +493,6 @@ describe("SOP service", () => {
       processingStatus: "PROCESSING",
       failureMessage: null,
     });
-    sopDocumentUpdate.mockResolvedValue({});
     const fetch = stubVoyageEmbedding();
     const { processSopIngestionJob } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -567,14 +503,11 @@ describe("SOP service", () => {
     ).rejects.toThrow(/SOP Document PDF could not be parsed/);
 
     expect(fetch).not.toHaveBeenCalled();
-    expect(executeRaw).not.toHaveBeenCalled();
-    expect(sopDocumentUpdate).toHaveBeenCalledWith({
-      where: { id: "doc-pdf-corrupt" },
-      data: {
-        processingStatus: "FAILED",
-        failureMessage: expect.stringMatching(/SOP Document PDF could not be parsed/),
-      },
-    });
+    expect(replaceSopChunks).not.toHaveBeenCalled();
+    expect(markSopDocumentFailed).toHaveBeenCalledWith(
+      "doc-pdf-corrupt",
+      expect.stringMatching(/SOP Document PDF could not be parsed/),
+    );
   });
 
   test("retries retryable Voyage embedding failures before marking the SOP Document FAILED", async () => {
@@ -584,7 +517,7 @@ describe("SOP service", () => {
       await fs.mkdir(storageDir, { recursive: true });
       await fs.writeFile(storagePath, "Call every new lead within five minutes.");
     });
-    sopDocumentFindUnique.mockResolvedValue({
+    findSopDocumentById.mockResolvedValue({
       id: "doc-embedding-failure",
       originalFilename: "seller-playbook.txt",
       contentType: "text/plain",
@@ -594,7 +527,6 @@ describe("SOP service", () => {
       processingStatus: "PROCESSING",
       failureMessage: null,
     });
-    sopDocumentUpdate.mockResolvedValue({});
     const fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 503,
@@ -610,77 +542,36 @@ describe("SOP service", () => {
     ).rejects.toThrow("Voyage embeddings request failed with 503");
 
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(executeRaw).not.toHaveBeenCalled();
-    expect(sopDocumentUpdate).toHaveBeenCalledWith({
-      where: {
-        id: "doc-embedding-failure",
-      },
-      data: {
-        processingStatus: "FAILED",
-        failureMessage: "Voyage embeddings request failed with 503",
-      },
-    });
+    expect(replaceSopChunks).not.toHaveBeenCalled();
+    expect(markSopDocumentFailed).toHaveBeenCalledWith(
+      "doc-embedding-failure",
+      "Voyage embeddings request failed with 503",
+    );
   });
 
   describe("deleteSopDocument", () => {
-    test("removes a READY SOP Document row and its stored file bytes, relying on the schema cascade for chunks", async () => {
+    test("removes the SOP Document row and its stored file bytes, relying on the schema cascade for chunks", async () => {
       const storageDir = "/tmp/propertylead-review-desk/sops";
       const storagePath = `${storageDir}/doc-ready-delete`;
       await import("node:fs/promises").then(async (fs) => {
         await fs.mkdir(storageDir, { recursive: true });
         await fs.writeFile(storagePath, "Call hot seller leads within five minutes.");
       });
-      sopDocumentDelete.mockResolvedValue({ storagePath });
+      deleteSopDocumentRow.mockResolvedValue({ storagePath });
       const { deleteSopDocument } = await importWithRequiredEnv(() =>
         import("./index"),
       );
 
       await expect(deleteSopDocument("doc-ready-delete")).resolves.toBeUndefined();
 
-      expect(sopDocumentDelete).toHaveBeenCalledWith({
-        where: { id: "doc-ready-delete" },
-        select: { storagePath: true },
-      });
-      expect(sopChunkDeleteMany).not.toHaveBeenCalled();
-      await expect(
-        import("node:fs/promises").then((fs) => fs.access(storagePath)),
-      ).rejects.toThrow();
-    });
-
-    test("deletes a PROCESSING SOP Document the same way as READY, leaving the cascade to clean any racing chunks", async () => {
-      const storageDir = "/tmp/propertylead-review-desk/sops";
-      const storagePath = `${storageDir}/doc-processing-delete`;
-      await import("node:fs/promises").then(async (fs) => {
-        await fs.mkdir(storageDir, { recursive: true });
-        await fs.writeFile(storagePath, "Half-ingested playbook bytes.");
-      });
-      sopDocumentDelete.mockResolvedValue({ storagePath });
-      const { deleteSopDocument } = await importWithRequiredEnv(() =>
-        import("./index"),
-      );
-
-      await expect(
-        deleteSopDocument("doc-processing-delete"),
-      ).resolves.toBeUndefined();
-
-      expect(sopDocumentDelete).toHaveBeenCalledWith({
-        where: { id: "doc-processing-delete" },
-        select: { storagePath: true },
-      });
-      expect(sopDocumentFindUnique).not.toHaveBeenCalled();
-      expect(sopChunkDeleteMany).not.toHaveBeenCalled();
+      expect(deleteSopDocumentRow).toHaveBeenCalledWith("doc-ready-delete");
       await expect(
         import("node:fs/promises").then((fs) => fs.access(storagePath)),
       ).rejects.toThrow();
     });
 
     test("is a clear no-op when the SOP Document id does not exist (chosen behavior)", async () => {
-      const { Prisma } = await import("@prisma/client");
-      const notFound = new Prisma.PrismaClientKnownRequestError(
-        "Record to delete does not exist.",
-        { code: "P2025", clientVersion: "test" },
-      );
-      sopDocumentDelete.mockRejectedValue(notFound);
+      deleteSopDocumentRow.mockResolvedValue(null);
       const { deleteSopDocument } = await importWithRequiredEnv(() =>
         import("./index"),
       );
@@ -689,16 +580,13 @@ describe("SOP service", () => {
         deleteSopDocument("does-not-exist"),
       ).resolves.toBeUndefined();
 
-      expect(sopDocumentDelete).toHaveBeenCalledWith({
-        where: { id: "does-not-exist" },
-        select: { storagePath: true },
-      });
+      expect(deleteSopDocumentRow).toHaveBeenCalledWith("does-not-exist");
     });
 
     test("tolerates an already-missing stored file (ENOENT) after the row delete succeeds", async () => {
       const storagePath =
         "/tmp/propertylead-review-desk/sops/doc-missing-file-delete";
-      sopDocumentDelete.mockResolvedValue({ storagePath });
+      deleteSopDocumentRow.mockResolvedValue({ storagePath });
       const { deleteSopDocument } = await importWithRequiredEnv(() =>
         import("./index"),
       );
@@ -709,7 +597,7 @@ describe("SOP service", () => {
     });
 
     test("propagates unexpected errors from the row delete without touching storage", async () => {
-      sopDocumentDelete.mockRejectedValue(new Error("connection refused"));
+      deleteSopDocumentRow.mockRejectedValue(new Error("connection refused"));
       const { deleteSopDocument } = await importWithRequiredEnv(() =>
         import("./index"),
       );
@@ -722,7 +610,7 @@ describe("SOP service", () => {
 
   describe("retrieveRelevantSopChunks", () => {
     test("returns top-k SOP Chunks in the order the database returned them, embedding the query via the Voyage REST API with VOYAGE_API_KEY and voyage-3", async () => {
-      queryRaw.mockResolvedValue([
+      findMostSimilarSopChunks.mockResolvedValue([
         {
           id: "chunk-1",
           sopDocumentId: "doc-1",
@@ -777,10 +665,11 @@ describe("SOP service", () => {
           }),
         },
       );
+      expect(findMostSimilarSopChunks).toHaveBeenCalledWith(expect.any(Array), 2);
     });
 
     test("returns an empty array when the SOP library has no matching chunks", async () => {
-      queryRaw.mockResolvedValue([]);
+      findMostSimilarSopChunks.mockResolvedValue([]);
       stubVoyageEmbedding();
 
       const { retrieveRelevantSopChunks } = await importWithRequiredEnv(() =>
@@ -803,7 +692,7 @@ describe("SOP service", () => {
       }
 
       expect(fetch).not.toHaveBeenCalled();
-      expect(queryRaw).not.toHaveBeenCalled();
+      expect(findMostSimilarSopChunks).not.toHaveBeenCalled();
     });
 
     test.each([
@@ -823,7 +712,7 @@ describe("SOP service", () => {
           retrieveRelevantSopChunks("pricing objection", k),
         ).rejects.toThrow();
         expect(fetch).not.toHaveBeenCalled();
-        expect(queryRaw).not.toHaveBeenCalled();
+        expect(findMostSimilarSopChunks).not.toHaveBeenCalled();
       },
     );
 
@@ -841,7 +730,7 @@ describe("SOP service", () => {
       await expect(
         retrieveRelevantSopChunks("pricing objection", 3),
       ).rejects.toThrow(/Voyage embeddings request failed with 503/);
-      expect(queryRaw).not.toHaveBeenCalled();
+      expect(findMostSimilarSopChunks).not.toHaveBeenCalled();
     });
   });
 });

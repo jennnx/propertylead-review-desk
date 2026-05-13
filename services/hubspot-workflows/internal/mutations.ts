@@ -4,6 +4,11 @@ import { getPrismaClient } from "../../database";
 
 import type { HubSpotWritebackPlan } from "./writeback-plan";
 
+// Re-exported so tests inside this service can assert on the "set this
+// Json column to SQL NULL" marker without importing `@prisma/client`
+// directly (forbidden outside the ADR 0009 allowlist).
+export const PRISMA_DB_NULL = Prisma.DbNull;
+
 export type HubSpotWorkflowRunRecord = {
   id: string;
 };
