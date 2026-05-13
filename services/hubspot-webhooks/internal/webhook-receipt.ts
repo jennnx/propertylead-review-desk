@@ -68,7 +68,6 @@ export type ReceiveHubSpotWebhookBatchInput = {
   rawBody: string;
   signature: string | null;
   timestamp: string | null;
-  now?: Date;
 };
 
 export type HubSpotWebhookBatchReceipt = {
@@ -94,8 +93,9 @@ export async function receiveHubSpotWebhookBatch({
   rawBody,
   signature,
   timestamp,
-  now = new Date(),
 }: ReceiveHubSpotWebhookBatchInput): Promise<HubSpotWebhookBatchReceipt> {
+  const now = new Date();
+
   verifyHubSpotSignature({
     method,
     webhookUrl,

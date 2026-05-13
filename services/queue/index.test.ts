@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { importWithRequiredEnv } from "@/tests/env";
 
@@ -33,16 +33,21 @@ describe("Queue service", () => {
     queueClose.mockResolvedValue(undefined);
   });
 
-  test("enqueues a job with retries", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("enqueues a job, retrying up to 3 times across transient enqueue failures", async () => {
     queueAdd
       .mockRejectedValueOnce(new Error("redis unavailable"))
       .mockRejectedValueOnce(new Error("redis still unavailable"))
       .mockResolvedValueOnce({});
+    vi.useFakeTimers();
     const { enqueueQueueJobWithRetries } = await importWithRequiredEnv(() =>
       import("./index"),
     );
 
-    await enqueueQueueJobWithRetries({
+    const promise = enqueueQueueJobWithRetries({
       queueName: "hubspot.webhook.process",
       jobName: "hubspot.webhook.process",
       data: {
@@ -51,9 +56,9 @@ describe("Queue service", () => {
       jobOptions: {
         jobId: "hubspot-webhook-event:hubspot-event-retry",
       },
-      enqueueAttempts: 3,
-      retryDelayMs: 0,
     });
+    await vi.runAllTimersAsync();
+    await promise;
 
     expect(queueAdd).toHaveBeenCalledTimes(3);
     expect(queueAdd).toHaveBeenLastCalledWith(
@@ -70,21 +75,21 @@ describe("Queue service", () => {
 
   test("surfaces the final enqueue failure after retries are exhausted", async () => {
     queueAdd.mockRejectedValue(new Error("redis unavailable"));
+    vi.useFakeTimers();
     const { enqueueQueueJobWithRetries } = await importWithRequiredEnv(() =>
       import("./index"),
     );
 
-    await expect(
-      enqueueQueueJobWithRetries({
-        queueName: "hubspot.webhook.process",
-        jobName: "hubspot.webhook.process",
-        data: {
-          hubSpotWebhookEventId: "hubspot-event-enqueue-failure",
-        },
-        enqueueAttempts: 3,
-        retryDelayMs: 0,
-      }),
-    ).rejects.toThrow("redis unavailable");
+    const promise = enqueueQueueJobWithRetries({
+      queueName: "hubspot.webhook.process",
+      jobName: "hubspot.webhook.process",
+      data: {
+        hubSpotWebhookEventId: "hubspot-event-enqueue-failure",
+      },
+    });
+    const assertion = expect(promise).rejects.toThrow("redis unavailable");
+    await vi.runAllTimersAsync();
+    await assertion;
 
     expect(queueAdd).toHaveBeenCalledTimes(3);
     expect(queueClose).toHaveBeenCalledTimes(1);

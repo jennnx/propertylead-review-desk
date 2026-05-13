@@ -8,9 +8,6 @@ export type HubSpotWebhookProcessingJobData = {
   hubSpotWebhookEventId: string;
 };
 
-const ENQUEUE_ATTEMPTS = 3;
-const ENQUEUE_RETRY_DELAY_MS = 50;
-
 export function createHubSpotWebhookProcessingJobId(
   hubSpotWebhookEventId: string,
 ): string {
@@ -40,7 +37,5 @@ async function enqueueHubSpotWebhookProcessingJob(
     jobOptions: {
       jobId: createHubSpotWebhookProcessingJobId(hubSpotWebhookEventId),
     },
-    enqueueAttempts: ENQUEUE_ATTEMPTS,
-    retryDelayMs: ENQUEUE_RETRY_DELAY_MS,
   });
 }

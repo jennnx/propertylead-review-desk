@@ -7,12 +7,10 @@ export type EnqueueQueueJobInput<TData, TName extends string> = {
   jobName: TName;
   data: TData;
   jobOptions?: JobsOptions;
-  enqueueAttempts?: number;
-  retryDelayMs?: number;
 };
 
-const DEFAULT_ENQUEUE_ATTEMPTS = 1;
-const DEFAULT_RETRY_DELAY_MS = 50;
+const ENQUEUE_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 50;
 
 export async function enqueueQueueJobWithRetries<
   TData,
@@ -22,8 +20,6 @@ export async function enqueueQueueJobWithRetries<
   jobName,
   data,
   jobOptions,
-  enqueueAttempts = DEFAULT_ENQUEUE_ATTEMPTS,
-  retryDelayMs = DEFAULT_RETRY_DELAY_MS,
 }: EnqueueQueueJobInput<TData, TName>): Promise<void> {
   const queue = createQueue<TData, void, string>(queueName);
   const addJob = queue.add.bind(queue) as (
@@ -34,14 +30,14 @@ export async function enqueueQueueJobWithRetries<
   let lastError: unknown;
 
   try {
-    for (let attempt = 1; attempt <= enqueueAttempts; attempt++) {
+    for (let attempt = 1; attempt <= ENQUEUE_ATTEMPTS; attempt++) {
       try {
         await addJob(jobName, data, jobOptions);
         return;
       } catch (error) {
         lastError = error;
-        if (attempt < enqueueAttempts) {
-          await sleep(retryDelayMs);
+        if (attempt < ENQUEUE_ATTEMPTS) {
+          await sleep(RETRY_DELAY_MS);
         }
       }
     }
