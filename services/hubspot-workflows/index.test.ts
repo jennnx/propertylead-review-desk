@@ -18,6 +18,8 @@ const getConversationThread = vi.fn();
 const listConversationThreads = vi.fn();
 const getConversationThreadMessages = vi.fn();
 
+const recordProposedHubSpotWriteback = vi.fn();
+
 vi.mock("@/services/database", () => ({
   getPrismaClient: () => ({
     hubSpotWorkflowRun: {
@@ -25,6 +27,10 @@ vi.mock("@/services/database", () => ({
       update,
     },
   }),
+}));
+
+vi.mock("@/services/hubspot-writebacks", () => ({
+  recordProposedHubSpotWriteback,
 }));
 
 vi.mock("@/services/claude", () => ({
@@ -108,6 +114,8 @@ describe("HubSpot workflows service", () => {
     getConversationThread.mockReset();
     listConversationThreads.mockReset();
     getConversationThreadMessages.mockReset();
+    recordProposedHubSpotWriteback.mockReset();
+    recordProposedHubSpotWriteback.mockResolvedValue(undefined);
     messagesCreate.mockResolvedValue(
       claudeWritebackPlanResponse({
         kind: "no_writeback",
@@ -1154,5 +1162,85 @@ describe("HubSpot workflows service", () => {
         completedAt: expect.any(Date),
       },
     });
+  });
+
+  test("hands off to the HubSpot Writebacks service when a writeback plan is accepted", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate.mockResolvedValue(
+      claudeWritebackPlanResponse({
+        kind: "writeback",
+        fieldUpdates: [{ name: "pd_urgency", value: "high" }],
+        note: "Hot lead from Zillow.",
+      }),
+    );
+    configureInboundMessageHubSpot({
+      contact: { id: "123", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
+      rawWebhook: { eventId: 1001 },
+    });
+
+    expect(recordProposedHubSpotWriteback).toHaveBeenCalledTimes(1);
+    expect(recordProposedHubSpotWriteback).toHaveBeenCalledWith({
+      hubSpotWorkflowRunId: "workflow-run-1",
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [{ name: "pd_urgency", value: "high" }],
+        note: "Hot lead from Zillow.",
+      },
+    });
+  });
+
+  test("does not hand off to HubSpot Writebacks when the workflow run finishes with no writeback needed", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate.mockResolvedValue(
+      claudeWritebackPlanResponse({
+        kind: "no_writeback",
+        reason: "Nothing to enrich.",
+      }),
+    );
+    configureInboundMessageHubSpot({
+      contact: { id: "123", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
+      rawWebhook: { eventId: 1001 },
+    });
+
+    expect(recordProposedHubSpotWriteback).not.toHaveBeenCalled();
+  });
+
+  test("does not hand off to HubSpot Writebacks when the workflow run fails", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      handleHubSpotWebhookEvent({
+        hubSpotWebhookEventId: "hubspot-event-1",
+        normalizedEvent: {
+          type: "unsupported.event",
+          hubSpotObjectId: "123",
+        },
+        rawWebhook: { eventId: 1001 },
+      }),
+    ).rejects.toThrow("Unsupported HubSpot Workflow Event");
+
+    expect(recordProposedHubSpotWriteback).not.toHaveBeenCalled();
   });
 });

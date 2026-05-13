@@ -38,6 +38,13 @@ enum HubSpotWorkflowRunOutcome {
   WRITEBACK_PROPOSED  @map("writeback_proposed")
 }
 
+enum HubSpotWritebackState {
+  PENDING      @map("pending")
+  APPLIED      @map("applied")
+  AUTO_APPLIED @map("auto_applied")
+  REJECTED     @map("rejected")
+}
+
 enum SopDocumentProcessingStatus {
   PROCESSING @map("processing")
   READY      @map("ready")
@@ -73,9 +80,23 @@ model HubSpotWorkflowRun {
   completedAt            DateTime?
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
+  hubSpotWriteback       HubSpotWriteback?
 
   @@index([status, createdAt])
   @@map("hubspot_workflow_runs")
+}
+
+model HubSpotWriteback {
+  id                     String                @id @default(cuid())
+  hubSpotWorkflowRunId   String                @unique
+  hubSpotWorkflowRun     HubSpotWorkflowRun    @relation(fields: [hubSpotWorkflowRunId], references: [id], onDelete: Cascade)
+  plan                   Json
+  state                  HubSpotWritebackState @default(PENDING)
+  reviewDeskFeedbackNote String?
+  createdAt              DateTime              @default(now())
+
+  @@index([state, createdAt])
+  @@map("hubspot_writebacks")
 }
 
 model SopDocument {
