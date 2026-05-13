@@ -1,6 +1,16 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { importWithRequiredEnv } from "@/tests/env";
+
+const PDF_FIXTURE_PATH = path.join(
+  __dirname,
+  "internal",
+  "__fixtures__",
+  "sample.pdf",
+);
 
 const sopDocumentCreate = vi.fn();
 const sopDocumentFindMany = vi.fn();
@@ -167,19 +177,113 @@ describe("SOP service", () => {
     expect(enqueueQueueJobWithRetries).not.toHaveBeenCalled();
   });
 
-  test("rejects non-TXT SOP Document uploads before persistence or enqueue", async () => {
+  test("uploads a Markdown SOP Document by creating a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
+    sopDocumentCreate.mockImplementation(async ({ data }) => ({
+      ...data,
+      uploadedAt: new Date("2026-05-13T16:00:00.000Z"),
+      failureMessage: null,
+    }));
+    const { uploadSopDocument } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const document = await uploadSopDocument({
+      originalFilename: "seller-playbook.md",
+      contentType: "text/markdown",
+      byteSize: 32,
+      body: Buffer.from("# Seller Playbook\n\nCall fast."),
+    });
+
+    expect(sopDocumentCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        originalFilename: "seller-playbook.md",
+        contentType: "text/markdown",
+        processingStatus: "PROCESSING",
+        failureMessage: null,
+      }),
+    });
+    expect(document.contentType).toBe("text/markdown");
+    await expect(
+      import("node:fs/promises").then((fs) => fs.readFile(document.storagePath, "utf8")),
+    ).resolves.toBe("# Seller Playbook\n\nCall fast.");
+    expect(enqueueQueueJobWithRetries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: "sop.ingest",
+        data: { sopDocumentId: document.id },
+      }),
+    );
+  });
+
+  test("uploads a PDF SOP Document by creating a PROCESSING row, storing bytes, and enqueueing one ingestion job", async () => {
+    sopDocumentCreate.mockImplementation(async ({ data }) => ({
+      ...data,
+      uploadedAt: new Date("2026-05-13T16:00:00.000Z"),
+      failureMessage: null,
+    }));
+    const pdfBytes = await readFile(PDF_FIXTURE_PATH);
+    const { uploadSopDocument } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const document = await uploadSopDocument({
+      originalFilename: "seller-playbook.pdf",
+      contentType: "application/pdf",
+      byteSize: pdfBytes.byteLength,
+      body: pdfBytes,
+    });
+
+    expect(sopDocumentCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        originalFilename: "seller-playbook.pdf",
+        contentType: "application/pdf",
+        byteSize: pdfBytes.byteLength,
+        processingStatus: "PROCESSING",
+        failureMessage: null,
+      }),
+    });
+    expect(document.contentType).toBe("application/pdf");
+    await expect(
+      import("node:fs/promises").then((fs) => fs.readFile(document.storagePath)),
+    ).resolves.toEqual(pdfBytes);
+    expect(enqueueQueueJobWithRetries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: "sop.ingest",
+        data: { sopDocumentId: document.id },
+      }),
+    );
+  });
+
+  test("rejects SOP Document uploads with unsupported content types before persistence or enqueue", async () => {
     const { uploadSopDocument } = await importWithRequiredEnv(() =>
       import("./index"),
     );
 
     await expect(
       uploadSopDocument({
-        originalFilename: "playbook.txt",
-        contentType: "application/pdf",
+        originalFilename: "playbook.png",
+        contentType: "image/png",
         byteSize: 11,
-        body: Buffer.from("fake pdf"),
+        body: Buffer.from("not a doc"),
       }),
-    ).rejects.toThrow(/Only text\/plain/);
+    ).rejects.toThrow(/text\/plain.*text\/markdown.*application\/pdf/);
+
+    expect(sopDocumentCreate).not.toHaveBeenCalled();
+    expect(enqueueQueueJobWithRetries).not.toHaveBeenCalled();
+  });
+
+  test("rejects SOP Document uploads with unsupported filename extensions before persistence or enqueue", async () => {
+    const { uploadSopDocument } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      uploadSopDocument({
+        originalFilename: "playbook.docx",
+        contentType: "text/plain",
+        byteSize: 11,
+        body: Buffer.from("docx"),
+      }),
+    ).rejects.toThrow(/\.txt.*\.md.*\.pdf/);
 
     expect(sopDocumentCreate).not.toHaveBeenCalled();
     expect(enqueueQueueJobWithRetries).not.toHaveBeenCalled();
@@ -386,6 +490,86 @@ describe("SOP service", () => {
       data: {
         processingStatus: "FAILED",
         failureMessage: "SOP Document did not contain any text.",
+      },
+    });
+  });
+
+  test("processes a stored PDF SOP Document into READY chunks using the unpdf parsing seam", async () => {
+    const storageDir = "/tmp/propertylead-review-desk/sops";
+    const storagePath = `${storageDir}/doc-pdf-success`;
+    const fixtureBytes = await readFile(PDF_FIXTURE_PATH);
+    await import("node:fs/promises").then(async (fs) => {
+      await fs.mkdir(storageDir, { recursive: true });
+      await fs.writeFile(storagePath, fixtureBytes);
+    });
+    sopDocumentFindUnique.mockResolvedValue({
+      id: "doc-pdf-success",
+      originalFilename: "seller-playbook.pdf",
+      contentType: "application/pdf",
+      byteSize: fixtureBytes.byteLength,
+      storagePath,
+      uploadedAt: new Date("2026-05-13T15:00:00.000Z"),
+      processingStatus: "PROCESSING",
+      failureMessage: null,
+    });
+    sopDocumentUpdate.mockResolvedValue({});
+    executeRaw.mockResolvedValue(1);
+    stubVoyageEmbedding(new Array(1024).fill(0.03));
+    const { processSopIngestionJob } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      processSopIngestionJob({ sopDocumentId: "doc-pdf-success" }),
+    ).resolves.toBeUndefined();
+
+    expect(executeRaw).toHaveBeenCalled();
+    expect(sopChunkDeleteMany).toHaveBeenCalledWith({
+      where: { sopDocumentId: "doc-pdf-success" },
+    });
+    expect(sopDocumentUpdate).toHaveBeenCalledWith({
+      where: { id: "doc-pdf-success" },
+      data: {
+        processingStatus: "READY",
+        failureMessage: null,
+      },
+    });
+  });
+
+  test("marks the SOP Document FAILED with a descriptive message when the PDF cannot be parsed", async () => {
+    const storageDir = "/tmp/propertylead-review-desk/sops";
+    const storagePath = `${storageDir}/doc-pdf-corrupt`;
+    await import("node:fs/promises").then(async (fs) => {
+      await fs.mkdir(storageDir, { recursive: true });
+      await fs.writeFile(storagePath, "this is not actually a pdf file");
+    });
+    sopDocumentFindUnique.mockResolvedValue({
+      id: "doc-pdf-corrupt",
+      originalFilename: "corrupt.pdf",
+      contentType: "application/pdf",
+      byteSize: 32,
+      storagePath,
+      uploadedAt: new Date("2026-05-13T15:00:00.000Z"),
+      processingStatus: "PROCESSING",
+      failureMessage: null,
+    });
+    sopDocumentUpdate.mockResolvedValue({});
+    const fetch = stubVoyageEmbedding();
+    const { processSopIngestionJob } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      processSopIngestionJob({ sopDocumentId: "doc-pdf-corrupt" }),
+    ).rejects.toThrow(/SOP Document PDF could not be parsed/);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(sopDocumentUpdate).toHaveBeenCalledWith({
+      where: { id: "doc-pdf-corrupt" },
+      data: {
+        processingStatus: "FAILED",
+        failureMessage: expect.stringMatching(/SOP Document PDF could not be parsed/),
       },
     });
   });

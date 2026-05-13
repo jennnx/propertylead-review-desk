@@ -35,7 +35,7 @@ async function ingestSopDocument(sopDocumentId: string): Promise<void> {
   }
 
   const file = await readFile(document.storagePath);
-  const text = extractSopText(file, document.contentType);
+  const text = await extractSopText(file, document.contentType);
   const chunks = await chunkSopText(text, document.contentType);
   if (chunks.length === 0) {
     throw new Error("SOP Document did not produce any chunks.");

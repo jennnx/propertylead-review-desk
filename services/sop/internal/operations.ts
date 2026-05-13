@@ -2,16 +2,68 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { z } from "zod";
+
 import { env } from "@/lib/env";
 import { getPrismaClient } from "@/services/database";
 import { QUEUE_NAMES, enqueueQueueJobWithRetries } from "@/services/queue";
 
-export type UploadSopDocumentInput = {
-  originalFilename: string;
-  contentType: string;
-  byteSize: number;
-  body: Buffer;
-};
+const MAX_SOP_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+const SUPPORTED_SOP_CONTENT_TYPES = [
+  "text/plain",
+  "text/markdown",
+  "application/pdf",
+] as const;
+
+const SUPPORTED_SOP_FILENAME_EXTENSIONS = [".txt", ".md", ".pdf"] as const;
+
+const UploadSopDocumentInputSchema = z
+  .object({
+    originalFilename: z.string().min(1, "SOP Document filename is required."),
+    contentType: z.string(),
+    byteSize: z.number().int().nonnegative(),
+    body: z.instanceof(Buffer),
+  })
+  .superRefine((input, ctx) => {
+    if (
+      !(SUPPORTED_SOP_CONTENT_TYPES as readonly string[]).includes(
+        input.contentType,
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contentType"],
+        message: `SOP Document content type must be one of: ${SUPPORTED_SOP_CONTENT_TYPES.join(", ")}.`,
+      });
+    }
+
+    const filename = input.originalFilename.toLowerCase();
+    if (
+      !SUPPORTED_SOP_FILENAME_EXTENSIONS.some((extension) =>
+        filename.endsWith(extension),
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["originalFilename"],
+        message: `SOP Document filename must end with one of: ${SUPPORTED_SOP_FILENAME_EXTENSIONS.join(", ")}.`,
+      });
+    }
+
+    if (
+      input.byteSize > MAX_SOP_UPLOAD_BYTES ||
+      input.body.byteLength > MAX_SOP_UPLOAD_BYTES
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["byteSize"],
+        message: "SOP Document uploads must be 10 MB or smaller.",
+      });
+    }
+  });
+
+export type UploadSopDocumentInput = z.infer<typeof UploadSopDocumentInputSchema>;
 
 export type SopDocumentSummary = {
   id: string;
@@ -27,9 +79,6 @@ export type SopDocumentSummary = {
 export type SopDocument = SopDocumentSummary & {
   storagePath: string;
 };
-
-const MAX_SOP_UPLOAD_BYTES = 10 * 1024 * 1024;
-const TXT_CONTENT_TYPE = "text/plain";
 
 async function notImplemented(): Promise<never> {
   throw new Error("not implemented");
@@ -113,16 +162,10 @@ export async function deleteSopDocument(id: string): Promise<void> {
 }
 
 function validateUpload(input: UploadSopDocumentInput): void {
-  if (!input.originalFilename.toLowerCase().endsWith(".txt")) {
-    throw new Error("Only .txt SOP Document uploads are supported.");
-  }
-
-  if (input.contentType !== TXT_CONTENT_TYPE) {
-    throw new Error("Only text/plain SOP Document uploads are supported.");
-  }
-
-  if (input.byteSize > MAX_SOP_UPLOAD_BYTES || input.body.byteLength > MAX_SOP_UPLOAD_BYTES) {
-    throw new Error("SOP Document uploads must be 10 MB or smaller.");
+  const result = UploadSopDocumentInputSchema.safeParse(input);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new Error(issue?.message ?? "Invalid SOP Document upload.");
   }
 }
 
