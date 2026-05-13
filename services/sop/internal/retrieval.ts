@@ -1,14 +1,9 @@
 import { z } from "zod";
 
 import { createVoyageEmbeddingClient } from "./embedding/client";
-import { findMostSimilarSopChunks } from "./queries";
+import { findMostSimilarSopChunks, type RetrievedSopChunk } from "./queries";
 
-export type RetrievedSopChunk = {
-  id: string;
-  sopDocumentId: string;
-  ordinal: number;
-  text: string;
-};
+export type { RetrievedSopChunk };
 
 const inputSchema = z.object({
   query: z.string().trim().min(1).max(8000),

@@ -1,6 +1,11 @@
 import { getPrismaClient } from "@/services/database";
 
-import type { RetrievedSopChunk } from "./retrieval";
+export type RetrievedSopChunk = {
+  id: string;
+  sopDocumentId: string;
+  ordinal: number;
+  text: string;
+};
 
 export async function findMostSimilarSopChunks(
   queryEmbedding: number[],
