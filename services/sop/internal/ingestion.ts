@@ -1,11 +1,10 @@
-import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-
-import { getPrismaClient } from "@/services/database";
 
 import { chunkSopText } from "./chunking/chunker";
 import { createVoyageEmbeddingClient } from "./embedding/client";
+import { markSopDocumentFailed, replaceSopChunks } from "./mutations";
 import { extractSopText } from "./parsing";
+import { findSopDocumentById } from "./queries";
 
 export type ProcessSopIngestionJobInput = {
   sopDocumentId: string;
@@ -17,18 +16,13 @@ export async function processSopIngestionJob({
   try {
     await ingestSopDocument(sopDocumentId);
   } catch (error) {
-    await markDocumentFailed(sopDocumentId, toFailureMessage(error));
+    await markSopDocumentFailed(sopDocumentId, toFailureMessage(error));
     throw error;
   }
 }
 
 async function ingestSopDocument(sopDocumentId: string): Promise<void> {
-  const prisma = getPrismaClient();
-  const document = await prisma.sopDocument.findUnique({
-    where: {
-      id: sopDocumentId,
-    },
-  });
+  const document = await findSopDocumentById(sopDocumentId);
 
   if (!document) {
     throw new Error(`SOP Document ${sopDocumentId} was not found.`);
@@ -51,46 +45,14 @@ async function ingestSopDocument(sopDocumentId: string): Promise<void> {
     throw new Error("Voyage embeddings response did not match SOP Chunk count.");
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.sopChunk.deleteMany({
-      where: {
-        sopDocumentId: document.id,
-      },
-    });
-
-    for (const chunk of chunks) {
-      const vectorLiteral = `[${embeddings[chunk.ordinal].join(",")}]`;
-      await tx.$executeRaw`
-        INSERT INTO "sop_chunks" ("id", "sopDocumentId", "ordinal", "text", "embedding")
-        VALUES (${randomUUID()}, ${document.id}, ${chunk.ordinal}, ${chunk.text}, ${vectorLiteral}::vector)
-      `;
-    }
-
-    await tx.sopDocument.update({
-      where: {
-        id: document.id,
-      },
-      data: {
-        processingStatus: "READY",
-        failureMessage: null,
-      },
-    });
-  });
-}
-
-async function markDocumentFailed(
-  sopDocumentId: string,
-  failureMessage: string,
-): Promise<void> {
-  await getPrismaClient().sopDocument.update({
-    where: {
-      id: sopDocumentId,
-    },
-    data: {
-      processingStatus: "FAILED",
-      failureMessage,
-    },
-  });
+  await replaceSopChunks(
+    document.id,
+    chunks.map((chunk) => ({
+      ordinal: chunk.ordinal,
+      text: chunk.text,
+      embedding: embeddings[chunk.ordinal],
+    })),
+  );
 }
 
 function toFailureMessage(error: unknown): string {

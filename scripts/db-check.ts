@@ -9,15 +9,13 @@ import {
   checkDatabaseReachable,
   checkPgvectorInstalled,
   disconnectPrismaClient,
-  getPrismaClient,
 } from "@/services/database";
 
 async function main(): Promise<number> {
-  const prisma = getPrismaClient();
   try {
-    const reachable = await checkDatabaseReachable(prisma);
+    const reachable = await checkDatabaseReachable();
     const pgvector = reachable.ok
-      ? await checkPgvectorInstalled(prisma)
+      ? await checkPgvectorInstalled()
       : { ok: false as const, error: "skipped (database unreachable)" };
 
     const lines = [

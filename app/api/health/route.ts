@@ -10,7 +10,6 @@ import {
 import {
   checkDatabaseReachable,
   checkPgvectorInstalled,
-  getPrismaClient,
 } from "@/services/database";
 
 type CheckOk = { ok: true };
@@ -45,18 +44,17 @@ function getHealthQueue(): Queue {
 }
 
 export async function GET(): Promise<Response> {
-  const prisma = getPrismaClient();
   const redis = getHealthRedis();
   const queue = getHealthQueue();
 
   const [database, redisReachable] = await Promise.all([
-    checkDatabaseReachable(prisma),
+    checkDatabaseReachable(),
     checkRedisReachable(redis),
   ]);
 
   const [pgvector, queueInspectable] = await Promise.all([
     database.ok
-      ? checkPgvectorInstalled(prisma)
+      ? checkPgvectorInstalled()
       : Promise.resolve<CheckFail>({ ok: false, error: "skipped (database unreachable)" }),
     redisReachable.ok
       ? checkQueueInspectable(queue)

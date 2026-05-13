@@ -10,7 +10,6 @@
 import {
   checkDatabaseReachable,
   checkPgvectorInstalled,
-  getPrismaClient,
   type CheckResult as DatabaseCheck,
 } from "../../services/database";
 import {
@@ -56,16 +55,15 @@ export async function disconnectProbeRedis(): Promise<void> {
 
 export async function processInfraSmoke(job: Job): Promise<InfraSmokeResult> {
   const startedAt = new Date().toISOString();
-  const prisma = getPrismaClient();
   const redis = getProbeRedis();
 
   const [redisCheck, databaseCheck] = await Promise.all([
     checkRedisReachable(redis),
-    checkDatabaseReachable(prisma),
+    checkDatabaseReachable(),
   ]);
 
   const pgvectorCheck: DatabaseCheck = databaseCheck.ok
-    ? await checkPgvectorInstalled(prisma)
+    ? await checkPgvectorInstalled()
     : { ok: false, error: "skipped (database unreachable)" };
 
   const checks = {

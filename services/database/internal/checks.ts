@@ -1,19 +1,19 @@
-import type { PrismaClient } from "@prisma/client";
+import { getPrismaClient } from "./client";
 
 export type CheckResult = { ok: true } | { ok: false; error: string };
 
-export async function checkDatabaseReachable(prisma: PrismaClient): Promise<CheckResult> {
+export async function checkDatabaseReachable(): Promise<CheckResult> {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await getPrismaClient().$queryRaw`SELECT 1`;
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
-export async function checkPgvectorInstalled(prisma: PrismaClient): Promise<CheckResult> {
+export async function checkPgvectorInstalled(): Promise<CheckResult> {
   try {
-    const rows = await prisma.$queryRaw<Array<{ extname: string }>>`
+    const rows = await getPrismaClient().$queryRaw<Array<{ extname: string }>>`
       SELECT extname FROM pg_extension WHERE extname = 'vector'
     `;
     if (rows.length === 0) {
