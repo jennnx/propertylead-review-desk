@@ -1,15 +1,7 @@
 import { z } from "zod";
 
-import {
-  hubSpot as defaultHubSpot,
-  type HubSpotClient,
-} from "@/services/hubspot";
-
 import { handleContactCreatedWorkflowEvent } from "./handle-contact-created-event";
-import {
-  handleInboundMessageWorkflowEvent,
-  type InboundMessageHubSpotClient,
-} from "./handle-inbound-message-event";
+import { handleInboundMessageWorkflowEvent } from "./handle-inbound-message-event";
 import {
   markHubSpotWorkflowRunFailed,
   markHubSpotWorkflowRunSucceededWithNoWriteback,
@@ -22,14 +14,12 @@ export type HandleHubSpotWebhookEventInput = {
   hubSpotWebhookEventId: string;
   normalizedEvent: unknown;
   rawWebhook: unknown;
-  hubSpot?: Pick<HubSpotClient, "getContact"> & InboundMessageHubSpotClient;
 };
 
 export async function handleHubSpotWebhookEvent({
   hubSpotWebhookEventId,
   normalizedEvent,
   rawWebhook,
-  hubSpot = defaultHubSpot,
 }: HandleHubSpotWebhookEventInput): Promise<void> {
   const run = await startHubSpotWorkflowRun(hubSpotWebhookEventId);
 
@@ -46,14 +36,12 @@ export async function handleHubSpotWebhookEvent({
       const result = await handleContactCreatedWorkflowEvent({
         runId: run.id,
         workflowEvent,
-        hubSpot,
       });
       acceptedPlan = result.plan;
     } else if (workflowEvent.type === "conversation.message.received") {
       const result = await handleInboundMessageWorkflowEvent({
         runId: run.id,
         workflowEvent,
-        hubSpot,
       });
       acceptedPlan = result.plan;
     }

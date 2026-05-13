@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { HubSpotClient } from "@/services/hubspot";
+import { hubSpot } from "@/services/hubspot";
 
 import {
   ENRICHMENT_INPUT_CONTACT_PROPERTY_NAMES,
@@ -26,22 +26,12 @@ export type InboundMessageWorkflowEvent = {
   hubSpotMessageId: string;
 };
 
-export type InboundMessageHubSpotClient = Pick<
-  HubSpotClient,
-  | "getContact"
-  | "getConversationThread"
-  | "listConversationThreads"
-  | "getConversationThreadMessages"
->;
-
 export async function handleInboundMessageWorkflowEvent({
   runId,
   workflowEvent,
-  hubSpot,
 }: {
   runId: string;
   workflowEvent: InboundMessageWorkflowEvent;
-  hubSpot: InboundMessageHubSpotClient;
 }): Promise<{ plan: HubSpotWritebackPlan }> {
   const triggeringThread = await hubSpot.getConversationThread(
     workflowEvent.hubSpotObjectId,

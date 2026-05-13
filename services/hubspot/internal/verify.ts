@@ -4,18 +4,9 @@ import {
 } from "./catalog";
 import { hubSpot, type HubSpotContactProperty } from "./client";
 
-export type HubSpotPropertyCatalogVerifyClient = {
-  getContactProperty: (name: string) => Promise<HubSpotContactProperty | null>;
-};
-
 export type HubSpotPropertyCatalogVerifyFailure = {
   name: string;
   reason: "missing" | "incompatible_property_metadata";
-};
-
-export type VerifyWritableHubSpotPropertyCatalogInput = {
-  hubSpot?: HubSpotPropertyCatalogVerifyClient;
-  catalog?: readonly WritableHubSpotPropertyCatalogEntry[];
 };
 
 export type VerifyWritableHubSpotPropertyCatalogResult = {
@@ -23,17 +14,14 @@ export type VerifyWritableHubSpotPropertyCatalogResult = {
   failures: HubSpotPropertyCatalogVerifyFailure[];
 };
 
-export async function verifyWritableHubSpotPropertyCatalog({
-  hubSpot: verifyClient = hubSpot,
-  catalog = WRITABLE_HUBSPOT_PROPERTY_CATALOG,
-}: VerifyWritableHubSpotPropertyCatalogInput = {}): Promise<VerifyWritableHubSpotPropertyCatalogResult> {
+export async function verifyWritableHubSpotPropertyCatalog(): Promise<VerifyWritableHubSpotPropertyCatalogResult> {
   const result: VerifyWritableHubSpotPropertyCatalogResult = {
     verified: [],
     failures: [],
   };
 
-  for (const entry of catalog) {
-    const existingProperty = await verifyClient.getContactProperty(entry.name);
+  for (const entry of WRITABLE_HUBSPOT_PROPERTY_CATALOG) {
+    const existingProperty = await hubSpot.getContactProperty(entry.name);
 
     if (!existingProperty) {
       result.failures.push({ name: entry.name, reason: "missing" });

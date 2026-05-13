@@ -1,13 +1,10 @@
 import { env } from "@/lib/env";
 
-export type HubSpotFetch = (
-  input: string,
-  init?: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string;
-  },
-) => Promise<Response>;
+type HubSpotFetchInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+};
 
 export type HubSpotContact = {
   id: string;
@@ -69,12 +66,6 @@ export type HubSpotContactProperty = {
   options?: { label?: string; value: string }[];
 };
 
-export type CreateHubSpotClientInput = {
-  accessToken?: string;
-  baseUrl?: string;
-  fetch?: HubSpotFetch;
-};
-
 export type HubSpotClient = {
   getContact: (
     contactId: string,
@@ -93,15 +84,11 @@ export type HubSpotClient = {
   getContactProperty: (name: string) => Promise<HubSpotContactProperty | null>;
 };
 
-const DEFAULT_HUBSPOT_BASE_URL = "https://api.hubapi.com";
+const HUBSPOT_BASE_URL = "https://api.hubapi.com";
 
-export function createHubSpotClient({
-  accessToken = env.HUBSPOT_ACCESS_TOKEN,
-  baseUrl = DEFAULT_HUBSPOT_BASE_URL,
-  fetch: fetchHubSpot = globalThis.fetch,
-}: CreateHubSpotClientInput = {}): HubSpotClient {
+function createHubSpotClient(): HubSpotClient {
   const authHeaders = (): Record<string, string> => ({
-    authorization: `Bearer ${accessToken}`,
+    authorization: `Bearer ${env.HUBSPOT_ACCESS_TOKEN}`,
     accept: "application/json",
   });
 
@@ -112,14 +99,14 @@ export function createHubSpotClient({
       searchParams?: URLSearchParams;
     } = {},
   ): Promise<T> => {
-    const init: NonNullable<Parameters<HubSpotFetch>[1]> = {
+    const init: HubSpotFetchInit = {
       headers: authHeaders(),
     };
 
     if (input.method) init.method = input.method;
 
-    const response = await fetchHubSpot(
-      `${baseUrl}${path}${formatSearchParams(input.searchParams)}`,
+    const response = await globalThis.fetch(
+      `${HUBSPOT_BASE_URL}${path}${formatSearchParams(input.searchParams)}`,
       init,
     );
 
@@ -194,8 +181,8 @@ export function createHubSpotClient({
       return { results: buffer };
     },
     async getContactProperty(name) {
-      const response = await fetchHubSpot(
-        `${baseUrl}/crm/v3/properties/contacts/${encodeURIComponent(name)}`,
+      const response = await globalThis.fetch(
+        `${HUBSPOT_BASE_URL}/crm/v3/properties/contacts/${encodeURIComponent(name)}`,
         { headers: authHeaders() },
       );
 

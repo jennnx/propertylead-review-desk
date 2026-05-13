@@ -1,4 +1,4 @@
-import type { HubSpotClient } from "@/services/hubspot";
+import { hubSpot } from "@/services/hubspot";
 
 import {
   ENRICHMENT_INPUT_CONTACT_PROPERTY_NAMES,
@@ -22,11 +22,9 @@ export type ContactCreatedWorkflowEvent = {
 export async function handleContactCreatedWorkflowEvent({
   runId,
   workflowEvent,
-  hubSpot,
 }: {
   runId: string;
   workflowEvent: ContactCreatedWorkflowEvent;
-  hubSpot: Pick<HubSpotClient, "getContact">;
 }): Promise<{ plan: HubSpotWritebackPlan }> {
   const contact = await hubSpot.getContact(workflowEvent.hubSpotObjectId, {
     properties: [...ENRICHMENT_INPUT_CONTACT_PROPERTY_NAMES],

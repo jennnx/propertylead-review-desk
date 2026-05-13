@@ -1,8 +1,76 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { importWithRequiredEnv, REQUIRED_TEST_ENV } from "@/tests/env";
 
+import { WRITABLE_HUBSPOT_PROPERTY_CATALOG } from "./internal/catalog";
+import type {
+  HubSpotContactProperty,
+  WritableHubSpotPropertyCatalogEntry,
+} from "./index";
+
+function compatiblePropertyResponse(
+  entry: WritableHubSpotPropertyCatalogEntry,
+): HubSpotContactProperty {
+  return {
+    name: entry.name,
+    label: entry.label,
+    type: entry.type,
+    fieldType: entry.fieldType,
+    ...(entry.options
+      ? { options: entry.options.map((value) => ({ value })) }
+      : {}),
+  };
+}
+
+type CatalogFetchOverride = HubSpotContactProperty | "missing";
+
+function stubFetchForCatalog(
+  overrides: Record<string, CatalogFetchOverride> = {},
+): ReturnType<typeof vi.fn> {
+  const fetch = vi.fn().mockImplementation(async (url: string) => {
+    const match = url.match(/\/crm\/v3\/properties\/contacts\/([^/?]+)$/);
+    if (!match) throw new Error(`Unexpected HubSpot fetch URL: ${url}`);
+    const name = decodeURIComponent(match[1]);
+
+    const override = overrides[name];
+    if (override === "missing") {
+      return new Response(JSON.stringify({ message: "not found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (override) {
+      return new Response(JSON.stringify(override), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    const entry = WRITABLE_HUBSPOT_PROPERTY_CATALOG.find(
+      (candidate) => candidate.name === name,
+    );
+    if (!entry) {
+      return new Response(JSON.stringify({ message: "not found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify(compatiblePropertyResponse(entry)), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  });
+
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
+
 describe("HubSpot service", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   test("reads a HubSpot contact with the configured HubSpot Access Token", async () => {
     const fetchHubSpot = vi.fn().mockResolvedValue(
       new Response(
@@ -19,13 +87,11 @@ describe("HubSpot service", () => {
         },
       ),
     );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    const contact = await client.getContact("123", {
+    const contact = await hubSpot.getContact("123", {
       properties: ["email", "pd_urgency"],
     });
 
@@ -67,13 +133,11 @@ describe("HubSpot service", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    const thread = await client.getConversationThreadMessages("thread-123");
+    const thread = await hubSpot.getConversationThreadMessages("thread-123");
 
     expect(thread.results.map((m) => (m as { id: string }).id)).toEqual([
       "message-1",
@@ -93,13 +157,11 @@ describe("HubSpot service", () => {
 
   test("returns no messages and skips HubSpot when limit is zero", async () => {
     const fetchHubSpot = vi.fn();
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    const thread = await client.getConversationThreadMessages("thread-123", {
+    const thread = await hubSpot.getConversationThreadMessages("thread-123", {
       limit: 0,
     });
 
@@ -122,13 +184,11 @@ describe("HubSpot service", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    const thread = await client.getConversationThreadMessages("thread-123", {
+    const thread = await hubSpot.getConversationThreadMessages("thread-123", {
       limit: 2,
     });
 
@@ -165,13 +225,11 @@ describe("HubSpot service", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         ),
       );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    const thread = await client.getConversationThreadMessages("thread-123", {
+    const thread = await hubSpot.getConversationThreadMessages("thread-123", {
       limit: 3,
     });
 
@@ -207,13 +265,11 @@ describe("HubSpot service", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         ),
       );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    const threadList = await client.listConversationThreads({
+    const threadList = await hubSpot.listConversationThreads({
       associatedContactId: "contact-7",
     });
 
@@ -246,13 +302,11 @@ describe("HubSpot service", () => {
         },
       ),
     );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-    await expect(client.getContactProperty("email")).resolves.toEqual({
+    await expect(hubSpot.getContactProperty("email")).resolves.toEqual({
       name: "email",
       label: "Email",
       type: "string",
@@ -276,14 +330,11 @@ describe("HubSpot service", () => {
         headers: { "content-type": "application/json" },
       }),
     );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
-
-    await expect(client.getContactProperty("pd_urgency")).resolves.toBeNull();
+    await expect(hubSpot.getContactProperty("pd_urgency")).resolves.toBeNull();
   });
 
   test("surfaces HubSpot error bodies in non-2xx responses", async () => {
@@ -300,25 +351,22 @@ describe("HubSpot service", () => {
         },
       ),
     );
+    vi.stubGlobal("fetch", fetchHubSpot);
 
-    const { createHubSpotClient } = await importWithRequiredEnv(() =>
-      import("./index"),
-    );
-
-    const client = createHubSpotClient({ fetch: fetchHubSpot });
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
 
     await expect(
-      client.getContact("123", { properties: ["email"] }),
+      hubSpot.getContact("123", { properties: ["email"] }),
     ).rejects.toThrow(/status 401.*Unauthorized/);
   });
 
   test("represents the approved Writable HubSpot Property Catalog and rejects arbitrary properties", async () => {
     const {
-      WRITABLE_HUBSPOT_PROPERTY_CATALOG,
+      WRITABLE_HUBSPOT_PROPERTY_CATALOG: catalog,
       isWritableHubSpotPropertyName,
     } = await importWithRequiredEnv(() => import("./index"));
 
-    expect(WRITABLE_HUBSPOT_PROPERTY_CATALOG).toEqual(
+    expect(catalog).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "email",
@@ -346,134 +394,109 @@ describe("HubSpot service", () => {
     expect(isWritableHubSpotPropertyName("made_up_by_claude")).toBe(false);
   });
 
-  test("verifies catalog entries are present in HubSpot with compatible metadata", async () => {
-    const hubSpot = {
-      getContactProperty: vi
-        .fn()
-        .mockResolvedValueOnce({
-          name: "email",
-          label: "Email",
-          type: "string",
-          fieldType: "text",
-        })
-        .mockResolvedValueOnce({
-          name: "pd_urgency",
-          label: "PropertyDesk Urgency",
-          type: "enumeration",
-          fieldType: "select",
-          options: [
-            { value: "low" },
-            { value: "normal" },
-            { value: "high" },
-            { value: "critical" },
-            { value: "unknown" },
-            { value: "operator_added" },
-          ],
-        }),
-    };
+  test("verifies every Writable HubSpot Property Catalog entry against HubSpot", async () => {
+    stubFetchForCatalog();
 
-    const { verifyWritableHubSpotPropertyCatalog } = await importWithRequiredEnv(
-      () => import("./index"),
+    const { verifyWritableHubSpotPropertyCatalog } =
+      await importWithRequiredEnv(() => import("./index"));
+
+    const result = await verifyWritableHubSpotPropertyCatalog();
+
+    expect(result.failures).toEqual([]);
+    expect(result.verified).toEqual(
+      WRITABLE_HUBSPOT_PROPERTY_CATALOG.map((entry) => entry.name),
     );
-
-    const result = await verifyWritableHubSpotPropertyCatalog({
-      hubSpot,
-      catalog: [
-        {
-          name: "email",
-          label: "Email",
-          type: "string",
-          fieldType: "text",
-          setup: "verify",
-        },
-        {
-          name: "pd_urgency",
-          label: "PropertyDesk Urgency",
-          type: "enumeration",
-          fieldType: "select",
-          setup: "create",
-          options: ["low", "normal", "high", "critical", "unknown"],
-        },
-      ],
-    });
-
-    expect(result).toEqual({
-      verified: ["email", "pd_urgency"],
-      failures: [],
-    });
   });
 
   test("reports missing and incompatible catalog entries as failures", async () => {
-    const hubSpot = {
-      getContactProperty: vi
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          name: "pd_urgency",
-          label: "PropertyDesk Urgency",
-          type: "string",
-          fieldType: "text",
-        })
-        .mockResolvedValueOnce({
-          name: "pd_buy_readiness",
-          label: "PropertyDesk Buy Readiness",
-          type: "enumeration",
-          fieldType: "select",
-          options: [{ value: "browsing" }, { value: "wants_showing" }],
-        }),
-    };
-
-    const { verifyWritableHubSpotPropertyCatalog } = await importWithRequiredEnv(
-      () => import("./index"),
-    );
-
-    const result = await verifyWritableHubSpotPropertyCatalog({
-      hubSpot,
-      catalog: [
-        {
-          name: "firstname",
-          label: "First name",
-          type: "string",
-          fieldType: "text",
-          setup: "verify",
-        },
-        {
-          name: "pd_urgency",
-          label: "PropertyDesk Urgency",
-          type: "enumeration",
-          fieldType: "select",
-          setup: "create",
-          options: ["low", "normal", "high", "critical", "unknown"],
-        },
-        {
-          name: "pd_buy_readiness",
-          label: "PropertyDesk Buy Readiness",
-          type: "enumeration",
-          fieldType: "select",
-          setup: "create",
-          options: [
-            "browsing",
-            "wants_showing",
-            "actively_touring",
-            "preapproved",
-            "offer_ready",
-            "not_buying",
-            "unknown",
-          ],
-        },
-      ],
+    stubFetchForCatalog({
+      email: "missing",
+      pd_urgency: {
+        name: "pd_urgency",
+        label: "PropertyDesk Urgency",
+        type: "string",
+        fieldType: "text",
+      },
+      pd_buy_readiness: {
+        name: "pd_buy_readiness",
+        label: "PropertyDesk Buy Readiness",
+        type: "enumeration",
+        fieldType: "select",
+        options: [{ value: "browsing" }, { value: "wants_showing" }],
+      },
     });
 
-    expect(result).toEqual({
-      verified: [],
-      failures: [
-        { name: "firstname", reason: "missing" },
+    const { verifyWritableHubSpotPropertyCatalog } =
+      await importWithRequiredEnv(() => import("./index"));
+
+    const result = await verifyWritableHubSpotPropertyCatalog();
+
+    expect(result.failures).toEqual(
+      expect.arrayContaining([
+        { name: "email", reason: "missing" },
         { name: "pd_urgency", reason: "incompatible_property_metadata" },
         {
           name: "pd_buy_readiness",
           reason: "incompatible_property_metadata",
         },
-      ],
+      ]),
+    );
+    expect(result.verified).not.toContain("email");
+    expect(result.verified).not.toContain("pd_urgency");
+    expect(result.verified).not.toContain("pd_buy_readiness");
+  });
+
+  test("boot logs success and does not exit when every catalog entry verifies", async () => {
+    stubFetchForCatalog();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const errorLog = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+
+    const { verifyWritableHubSpotPropertyCatalogOnBoot } =
+      await importWithRequiredEnv(() => import("./index"));
+
+    await verifyWritableHubSpotPropertyCatalogOnBoot({ processName: "next" });
+
+    expect(exit).not.toHaveBeenCalled();
+    expect(errorLog).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      `hubspot[next]: Writable HubSpot Property Catalog verified (${WRITABLE_HUBSPOT_PROPERTY_CATALOG.length} entries)`,
+    );
+  });
+
+  test("boot logs each failure and exits non-zero when verification reports failures", async () => {
+    stubFetchForCatalog({
+      pd_urgency: "missing",
+      pd_buy_readiness: {
+        name: "pd_buy_readiness",
+        label: "PropertyDesk Buy Readiness",
+        type: "string",
+        fieldType: "text",
+      },
     });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const errorLog = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+
+    const { verifyWritableHubSpotPropertyCatalogOnBoot } =
+      await importWithRequiredEnv(() => import("./index"));
+
+    await verifyWritableHubSpotPropertyCatalogOnBoot({ processName: "worker" });
+
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(log).not.toHaveBeenCalled();
+    expect(errorLog.mock.calls.map((call) => call[0])).toEqual([
+      "hubspot[worker]: Writable HubSpot Property Catalog verification failed",
+      "hubspot[worker]: pd_urgency: missing",
+      "hubspot[worker]: pd_buy_readiness: incompatible_property_metadata",
+    ]);
   });
 });
