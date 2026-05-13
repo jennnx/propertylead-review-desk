@@ -37,9 +37,25 @@ vi.mock("@/services/queue", () => ({
 }));
 
 function stubVoyageEmbedding(embedding: number[] = new Array(1024).fill(0.01)) {
-  const fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ data: [{ embedding }] }),
+  const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+    const body =
+      typeof init?.body === "string"
+        ? (JSON.parse(init.body) as { input?: string[] | string })
+        : {};
+    const input = Array.isArray(body.input)
+      ? body.input
+      : typeof body.input === "string"
+        ? [body.input]
+        : [];
+
+    return {
+      ok: true,
+      json: async () => ({
+        data: input.map(() => ({
+          embedding,
+        })),
+      }),
+    };
   });
   vi.stubGlobal("fetch", fetch);
   return fetch;
@@ -313,6 +329,7 @@ describe("SOP service", () => {
             "Call hot seller leads within five minutes.\n\nFollow up twice the first day.",
           ],
           model: "voyage-3",
+          input_type: "document",
         }),
       }),
     );
@@ -481,6 +498,7 @@ describe("SOP service", () => {
           body: JSON.stringify({
             input: ["pricing objection"],
             model: "voyage-3",
+            input_type: "query",
           }),
         },
       );

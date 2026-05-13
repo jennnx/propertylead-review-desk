@@ -43,6 +43,9 @@ async function ingestSopDocument(sopDocumentId: string): Promise<void> {
 
   const embeddings = await createVoyageEmbeddingClient().embedTexts(
     chunks.map((chunk) => chunk.text),
+    {
+      inputType: "document",
+    },
   );
   if (embeddings.length !== chunks.length) {
     throw new Error("Voyage embeddings response did not match SOP Chunk count.");

@@ -22,7 +22,9 @@ export async function retrieveRelevantSopChunks(
   }
 
   const embeddingClient = createVoyageEmbeddingClient();
-  const [embedding] = await embeddingClient.embedTexts([parsed.data.query]);
+  const [embedding] = await embeddingClient.embedTexts([parsed.data.query], {
+    inputType: "query",
+  });
   if (!embedding) {
     throw new Error(
       "Voyage embeddings response did not include an embedding for the query",
