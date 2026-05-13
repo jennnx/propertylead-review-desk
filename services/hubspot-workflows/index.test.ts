@@ -436,6 +436,7 @@ describe("HubSpot workflows service", () => {
     ).rejects.toThrow(/no associated contact/);
 
     expect(hubSpot.getContact).not.toHaveBeenCalled();
+    expect(messagesCreate).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
       where: { id: "workflow-run-1" },
       data: {
@@ -829,6 +830,269 @@ describe("HubSpot workflows service", () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  test("requests a HubSpot Writeback Plan from Claude and stores the accepted plan plus AI trace for conversation.message.received runs", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate.mockResolvedValue(
+      claudeWritebackPlanResponse({
+        kind: "writeback",
+        fieldUpdates: [{ name: "pd_urgency", value: "high" }],
+        note: "Suggested reply: thanks for reaching out — happy to set up a viewing this weekend.",
+      }),
+    );
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: "contact-7" },
+      contact: { id: "contact-7", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "conversation.message.received",
+        hubSpotObjectId: "thread-1",
+        hubSpotMessageId: "msg-trigger",
+      },
+      rawWebhook: { eventId: 1001 },
+      hubSpot,
+    });
+
+    expect(messagesCreate).toHaveBeenCalledTimes(1);
+
+    const writebackUpdate = update.mock.calls
+      .map((call) => call[0])
+      .find((arg) => arg?.data?.writebackPlan !== undefined);
+
+    expect(writebackUpdate).toMatchObject({
+      where: { id: "workflow-run-1" },
+      data: {
+        writebackPlan: {
+          kind: "writeback",
+          fieldUpdates: [{ name: "pd_urgency", value: "high" }],
+          note: "Suggested reply: thanks for reaching out — happy to set up a viewing this weekend.",
+        },
+        writebackPlanInput: expect.any(Object),
+        writebackPlanRawOutputs: expect.any(Array),
+        writebackPlanValidations: expect.any(Array),
+      },
+    });
+    expect(writebackUpdate?.data?.writebackPlanValidations).toEqual([
+      { ok: true },
+    ]);
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "workflow-run-1" },
+      data: {
+        status: "SUCCEEDED",
+        outcome: "WRITEBACK_PROPOSED",
+        completedAt: expect.any(Date),
+      },
+    });
+  });
+
+  test("passes the Current Conversation Session and triggering message id to the Claude prompt for inbound-message runs", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: "contact-7" },
+      threadList: [
+        { id: "thread-1", associatedContactId: "contact-7" },
+        { id: "thread-2", associatedContactId: "contact-7" },
+      ],
+      threadMessages: {
+        "thread-1": {
+          results: [
+            { id: "msg-a", createdAt: "2026-05-12T10:00:00.000Z" },
+            { id: "msg-c", createdAt: "2026-05-12T12:00:00.000Z" },
+          ],
+        },
+        "thread-2": {
+          results: [{ id: "msg-b", createdAt: "2026-05-12T11:00:00.000Z" }],
+        },
+      },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "conversation.message.received",
+        hubSpotObjectId: "thread-1",
+        hubSpotMessageId: "msg-c",
+      },
+      rawWebhook: { eventId: 1001 },
+      hubSpot,
+    });
+
+    const promptInput = messagesCreate.mock.calls[0]?.[0];
+    expect(promptInput).toBeDefined();
+    const userMessage = (
+      promptInput.messages[0].content as string
+    );
+    expect(userMessage).toContain("msg-c");
+    expect(userMessage).toContain("msg-b");
+    expect(userMessage).toContain("msg-a");
+    expect(userMessage).toContain("triggeringMessageId=msg-c");
+  });
+
+  test("represents suggested replies inside proposed note content, not as a separate domain field", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate.mockResolvedValue(
+      claudeWritebackPlanResponse({
+        kind: "writeback",
+        note: "Hi Ada — yes the property is still available. Want to book a tour Saturday at 11?",
+      }),
+    );
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: "contact-7" },
+      contact: { id: "contact-7", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "conversation.message.received",
+        hubSpotObjectId: "thread-1",
+        hubSpotMessageId: "msg-trigger",
+      },
+      rawWebhook: { eventId: 1001 },
+      hubSpot,
+    });
+
+    const writebackUpdate = update.mock.calls
+      .map((call) => call[0])
+      .find((arg) => arg?.data?.writebackPlan !== undefined);
+    const storedPlan = writebackUpdate?.data?.writebackPlan as Record<
+      string,
+      unknown
+    >;
+    expect(storedPlan).toEqual({
+      kind: "writeback",
+      fieldUpdates: [],
+      note: "Hi Ada — yes the property is still available. Want to book a tour Saturday at 11?",
+    });
+    expect(storedPlan).not.toHaveProperty("suggestedReply");
+    expect(storedPlan).not.toHaveProperty("suggested_reply");
+    expect(storedPlan).not.toHaveProperty("reply");
+  });
+
+  test("records a no_writeback HubSpot Writeback Plan for inbound-message runs when Claude returns no_writeback", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate.mockResolvedValue(
+      claudeWritebackPlanResponse({
+        kind: "no_writeback",
+        reason: "Inbound message is a thank-you; nothing to enrich.",
+      }),
+    );
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: "contact-7" },
+      contact: { id: "contact-7", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await handleHubSpotWebhookEvent({
+      hubSpotWebhookEventId: "hubspot-event-1",
+      normalizedEvent: {
+        type: "conversation.message.received",
+        hubSpotObjectId: "thread-1",
+        hubSpotMessageId: "msg-trigger",
+      },
+      rawWebhook: { eventId: 1001 },
+      hubSpot,
+    });
+
+    const writebackUpdate = update.mock.calls
+      .map((call) => call[0])
+      .find((arg) => arg?.data?.writebackPlan !== undefined);
+    expect(writebackUpdate?.data?.writebackPlan).toEqual({
+      kind: "no_writeback",
+      reason: "Inbound message is a thank-you; nothing to enrich.",
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "workflow-run-1" },
+      data: {
+        status: "SUCCEEDED",
+        outcome: "NO_WRITEBACK_NEEDED",
+        completedAt: expect.any(Date),
+      },
+    });
+  });
+
+  test("fails the inbound-message HubSpot Workflow Run when both Claude attempts produce invalid plans, preserving the trace", async () => {
+    upsert.mockResolvedValue({ id: "workflow-run-1" });
+    update.mockResolvedValue({});
+    messagesCreate
+      .mockResolvedValueOnce(
+        claudeWritebackPlanResponse({
+          kind: "writeback",
+          fieldUpdates: [{ name: "made_up_inbound_one", value: "x" }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        claudeWritebackPlanResponse({
+          kind: "writeback",
+          fieldUpdates: [{ name: "made_up_inbound_two", value: "y" }],
+        }),
+      );
+    const hubSpot = stubInboundMessageHubSpot({
+      thread: { id: "thread-1", associatedContactId: "contact-7" },
+      contact: { id: "contact-7", properties: { email: "ada@example.com" } },
+    });
+    const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    await expect(
+      handleHubSpotWebhookEvent({
+        hubSpotWebhookEventId: "hubspot-event-1",
+        normalizedEvent: {
+          type: "conversation.message.received",
+          hubSpotObjectId: "thread-1",
+          hubSpotMessageId: "msg-trigger",
+        },
+        rawWebhook: { eventId: 1001 },
+        hubSpot,
+      }),
+    ).rejects.toThrow(/valid HubSpot Writeback Plan/);
+
+    expect(messagesCreate).toHaveBeenCalledTimes(2);
+
+    const writebackUpdate = update.mock.calls
+      .map((call) => call[0])
+      .find((arg) => arg?.data?.writebackPlanInput !== undefined);
+    expect(writebackUpdate?.data?.writebackPlan).toBe(Prisma.DbNull);
+    expect(
+      (writebackUpdate?.data?.writebackPlanRawOutputs as unknown[]).length,
+    ).toBe(2);
+    expect(
+      (writebackUpdate?.data?.writebackPlanValidations as unknown[]).every(
+        (v) => (v as { ok?: boolean }).ok === false,
+      ),
+    ).toBe(true);
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "workflow-run-1" },
+      data: {
+        status: "FAILED",
+        outcome: null,
+        failureMessage: expect.stringMatching(/valid HubSpot Writeback Plan/),
+        completedAt: expect.any(Date),
+      },
+    });
   });
 
   test("marks the HubSpot Workflow Run failed when workflow processing fails", async () => {

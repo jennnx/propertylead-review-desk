@@ -8,8 +8,12 @@ import {
 } from "./enrichment-properties";
 import {
   recordHubSpotWorkflowRunEnrichmentInputContext,
+  recordHubSpotWorkflowRunWritebackPlanTrace,
   type HubSpotWorkflowRunConversationMessage,
+  type HubSpotWorkflowRunInboundMessageEnrichmentInputContext,
 } from "./mutations";
+import { requestInboundMessageWritebackPlan } from "./request-writeback-plan";
+import type { HubSpotWritebackPlan } from "./writeback-plan";
 
 const INBOUND_MESSAGE_TOTAL_LIMIT = 30;
 const INBOUND_MESSAGE_PER_THREAD_FETCH_LIMIT = 30;
@@ -38,7 +42,7 @@ export async function handleInboundMessageWorkflowEvent({
   runId: string;
   workflowEvent: InboundMessageWorkflowEvent;
   hubSpot: InboundMessageHubSpotClient;
-}): Promise<void> {
+}): Promise<{ plan: HubSpotWritebackPlan }> {
   const triggeringThread = await hubSpot.getConversationThread(
     workflowEvent.hubSpotObjectId,
   );
@@ -77,20 +81,45 @@ export async function handleInboundMessageWorkflowEvent({
     .sort(byCreatedAtDescending)
     .slice(0, INBOUND_MESSAGE_TOTAL_LIMIT);
 
-  await recordHubSpotWorkflowRunEnrichmentInputContext(runId, {
-    source: "hubspot_inbound_message",
-    hubSpotPortalId: workflowEvent.hubSpotPortalId ?? null,
-    occurredAt: workflowEvent.occurredAt ?? null,
-    triggeringMessageId: workflowEvent.hubSpotMessageId,
-    contact: {
-      id: contact.id,
-      properties: pickEnrichmentContactProperties(contact.properties),
-    },
-    currentConversationSession: {
-      messageLimit: INBOUND_MESSAGE_TOTAL_LIMIT,
-      messages,
-    },
+  const enrichmentInputContext: HubSpotWorkflowRunInboundMessageEnrichmentInputContext =
+    {
+      source: "hubspot_inbound_message",
+      hubSpotPortalId: workflowEvent.hubSpotPortalId ?? null,
+      occurredAt: workflowEvent.occurredAt ?? null,
+      triggeringMessageId: workflowEvent.hubSpotMessageId,
+      contact: {
+        id: contact.id,
+        properties: pickEnrichmentContactProperties(contact.properties),
+      },
+      currentConversationSession: {
+        messageLimit: INBOUND_MESSAGE_TOTAL_LIMIT,
+        messages,
+      },
+    };
+
+  await recordHubSpotWorkflowRunEnrichmentInputContext(
+    runId,
+    enrichmentInputContext,
+  );
+
+  const planResult = await requestInboundMessageWritebackPlan({
+    enrichmentInputContext,
   });
+
+  await recordHubSpotWorkflowRunWritebackPlanTrace(runId, {
+    input: planResult.input,
+    rawOutputs: planResult.rawOutputs,
+    validations: planResult.validations,
+    acceptedPlan: planResult.acceptedPlan,
+  });
+
+  if (!planResult.acceptedPlan) {
+    throw new Error(
+      `Failed to obtain a valid HubSpot Writeback Plan after ${planResult.rawOutputs.length} attempt(s)`,
+    );
+  }
+
+  return { plan: planResult.acceptedPlan };
 }
 
 const nullableString = z

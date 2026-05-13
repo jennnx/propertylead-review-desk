@@ -2,10 +2,14 @@ import { claude, DEFAULT_CLAUDE_MODEL } from "@/services/claude";
 
 import {
   buildContactCreatedWritebackPlanPrompt,
+  buildInboundMessageWritebackPlanPrompt,
   HUBSPOT_WRITEBACK_PLAN_TOOL_NAME,
   type HubSpotWritebackPlanPromptMaterial,
 } from "./prompt";
-import type { HubSpotWorkflowRunContactCreatedEnrichmentInputContext } from "./mutations";
+import type {
+  HubSpotWorkflowRunContactCreatedEnrichmentInputContext,
+  HubSpotWorkflowRunInboundMessageEnrichmentInputContext,
+} from "./mutations";
 import {
   validateHubSpotWritebackPlan,
   type HubSpotWritebackPlan,
@@ -32,7 +36,22 @@ export async function requestContactCreatedWritebackPlan(input: {
     enrichmentInputContext: input.enrichmentInputContext,
     model: DEFAULT_CLAUDE_MODEL,
   });
+  return requestWritebackPlan(material);
+}
 
+export async function requestInboundMessageWritebackPlan(input: {
+  enrichmentInputContext: HubSpotWorkflowRunInboundMessageEnrichmentInputContext;
+}): Promise<HubSpotWritebackPlanRequestResult> {
+  const material = buildInboundMessageWritebackPlanPrompt({
+    enrichmentInputContext: input.enrichmentInputContext,
+    model: DEFAULT_CLAUDE_MODEL,
+  });
+  return requestWritebackPlan(material);
+}
+
+async function requestWritebackPlan(
+  material: HubSpotWritebackPlanPromptMaterial,
+): Promise<HubSpotWritebackPlanRequestResult> {
   const rawOutputs: unknown[] = [];
   const validations: HubSpotWritebackPlanValidationTrace[] = [];
   let acceptedPlan: HubSpotWritebackPlan | null = null;
