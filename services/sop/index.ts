@@ -1,3 +1,8 @@
+export {
+  retrieveRelevantSopChunks,
+  type RetrievedSopChunk,
+} from "./internal/retrieval";
+
 export type UploadSopDocumentInput = {
   originalFilename: string;
   contentType: string;
@@ -17,13 +22,6 @@ export type SopDocumentSummary = {
 
 export type SopDocument = SopDocumentSummary & {
   storagePath: string;
-};
-
-export type RetrievedSopChunk = {
-  id: string;
-  sopDocumentId: string;
-  ordinal: number;
-  text: string;
 };
 
 async function notImplemented(): Promise<never> {
@@ -48,14 +46,5 @@ export async function getSopDocument(id: string): Promise<SopDocument | null> {
 
 export async function deleteSopDocument(id: string): Promise<void> {
   void id;
-  return notImplemented();
-}
-
-export async function retrieveRelevantSopChunks(
-  query: string,
-  k: number,
-): Promise<RetrievedSopChunk[]> {
-  void query;
-  void k;
   return notImplemented();
 }
