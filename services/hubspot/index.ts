@@ -1,7 +1,5 @@
 export {
-  createHubSpotClient,
   hubSpot,
-  type CreateHubSpotClientInput,
   type GetHubSpotContactInput,
   type GetHubSpotConversationThreadMessagesInput,
   type HubSpotClient,
@@ -24,9 +22,7 @@ export {
 } from "./internal/catalog";
 export {
   verifyWritableHubSpotPropertyCatalog,
-  type HubSpotPropertyCatalogVerifyClient,
   type HubSpotPropertyCatalogVerifyFailure,
-  type VerifyWritableHubSpotPropertyCatalogInput,
   type VerifyWritableHubSpotPropertyCatalogResult,
 } from "./internal/verify";
 export {
