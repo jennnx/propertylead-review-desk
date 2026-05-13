@@ -2,10 +2,8 @@ import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type {
-  HubSpotClient,
   HubSpotContact,
   HubSpotConversationThread,
-  HubSpotConversationThreadList,
   HubSpotConversationThreadMessages,
 } from "@/services/hubspot";
 import { importWithRequiredEnv } from "@/tests/env";
@@ -13,6 +11,11 @@ import { importWithRequiredEnv } from "@/tests/env";
 const upsert = vi.fn();
 const update = vi.fn();
 const messagesCreate = vi.fn();
+
+const getContact = vi.fn();
+const getConversationThread = vi.fn();
+const listConversationThreads = vi.fn();
+const getConversationThreadMessages = vi.fn();
 
 vi.mock("@/services/database", () => ({
   getPrismaClient: () => ({
@@ -37,6 +40,20 @@ vi.mock("@/services/claude", () => ({
   DEFAULT_CLAUDE_MODEL: "claude-sonnet-4-6",
 }));
 
+vi.mock("@/services/hubspot", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/hubspot")>();
+  return {
+    ...actual,
+    hubSpot: {
+      getContact,
+      getConversationThread,
+      listConversationThreads,
+      getConversationThreadMessages,
+    },
+  };
+});
+
 function claudeWritebackPlanResponse(input: unknown) {
   return {
     id: "msg_test",
@@ -55,11 +72,41 @@ function claudeWritebackPlanResponse(input: unknown) {
   };
 }
 
+function configureInboundMessageHubSpot(overrides: {
+  thread?: HubSpotConversationThread;
+  contact?: HubSpotContact;
+  threadList?: HubSpotConversationThread[];
+  threadMessages?: Record<string, HubSpotConversationThreadMessages>;
+} = {}) {
+  const thread: HubSpotConversationThread =
+    overrides.thread ?? { id: "thread-1", associatedContactId: "contact-1" };
+  const contact: HubSpotContact =
+    overrides.contact ?? {
+      id: thread.associatedContactId ?? "contact-1",
+      properties: {},
+    };
+  const threadList: HubSpotConversationThread[] =
+    overrides.threadList ?? [thread];
+  const threadMessages = overrides.threadMessages ?? {};
+
+  getConversationThread.mockResolvedValue(thread);
+  getContact.mockResolvedValue(contact);
+  listConversationThreads.mockResolvedValue({ results: threadList });
+  getConversationThreadMessages.mockImplementation(
+    async (threadId: string) =>
+      threadMessages[threadId] ?? { results: [] },
+  );
+}
+
 describe("HubSpot workflows service", () => {
   beforeEach(() => {
     upsert.mockReset();
     update.mockReset();
     messagesCreate.mockReset();
+    getContact.mockReset();
+    getConversationThread.mockReset();
+    listConversationThreads.mockReset();
+    getConversationThreadMessages.mockReset();
     messagesCreate.mockResolvedValue(
       claudeWritebackPlanResponse({
         kind: "no_writeback",
@@ -71,7 +118,7 @@ describe("HubSpot workflows service", () => {
   test("records a successful HubSpot Workflow Run for a target HubSpot Webhook Event", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot();
+    configureInboundMessageHubSpot();
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
       import("./index"),
     );
@@ -86,7 +133,6 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
     expect(upsert).toHaveBeenCalledWith({
@@ -123,7 +169,7 @@ describe("HubSpot workflows service", () => {
   test("fetches the triggering HubSpot Conversations thread for an inbound-message event", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-1" },
     });
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
@@ -140,16 +186,15 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
-    expect(hubSpot.getConversationThread).toHaveBeenCalledWith("thread-1");
+    expect(getConversationThread).toHaveBeenCalledWith("thread-1");
   });
 
   test("fetches the HubSpot contact associated with the triggering thread for an inbound-message event", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       contact: {
         id: "contact-7",
@@ -170,10 +215,9 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
-    expect(hubSpot.getContact).toHaveBeenCalledWith("contact-7", {
+    expect(getContact).toHaveBeenCalledWith("contact-7", {
       properties: expect.arrayContaining([
         "email",
         "firstname",
@@ -187,7 +231,7 @@ describe("HubSpot workflows service", () => {
   test("lists all HubSpot Conversations threads for the inbound-message contact", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
     });
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
@@ -204,10 +248,9 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
-    expect(hubSpot.listConversationThreads).toHaveBeenCalledWith({
+    expect(listConversationThreads).toHaveBeenCalledWith({
       associatedContactId: "contact-7",
     });
   });
@@ -215,7 +258,7 @@ describe("HubSpot workflows service", () => {
   test("fetches the latest 30 messages from each of the contact's HubSpot Conversations threads", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       threadList: [
         { id: "thread-1", associatedContactId: "contact-7" },
@@ -236,14 +279,13 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
-    expect(hubSpot.getConversationThreadMessages).toHaveBeenCalledWith(
+    expect(getConversationThreadMessages).toHaveBeenCalledWith(
       "thread-1",
       { limit: 30 },
     );
-    expect(hubSpot.getConversationThreadMessages).toHaveBeenCalledWith(
+    expect(getConversationThreadMessages).toHaveBeenCalledWith(
       "thread-2",
       { limit: 30 },
     );
@@ -252,7 +294,7 @@ describe("HubSpot workflows service", () => {
   test("captures inbound-message Enrichment Input Context with contact and aggregated conversation session", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       contact: {
         id: "contact-7",
@@ -295,7 +337,6 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
     const firstUpdateCall = update.mock.calls[0]?.[0];
@@ -339,7 +380,7 @@ describe("HubSpot workflows service", () => {
   test("preserves HubSpot message metadata and truncation status in current conversation session", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       threadList: [{ id: "thread-1", associatedContactId: "contact-7" }],
       threadMessages: {
@@ -381,7 +422,6 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
     const firstUpdateCall = update.mock.calls[0]?.[0];
@@ -415,7 +455,7 @@ describe("HubSpot workflows service", () => {
   test("fails the HubSpot Workflow Run when the triggering thread has no associated contact", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: null },
     });
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
@@ -431,11 +471,10 @@ describe("HubSpot workflows service", () => {
           hubSpotMessageId: "message-123",
         },
         rawWebhook: { eventId: 1001 },
-        hubSpot,
       }),
     ).rejects.toThrow(/no associated contact/);
 
-    expect(hubSpot.getContact).not.toHaveBeenCalled();
+    expect(getContact).not.toHaveBeenCalled();
     expect(messagesCreate).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
       where: { id: "workflow-run-1" },
@@ -451,7 +490,7 @@ describe("HubSpot workflows service", () => {
   test("captures an empty current conversation session when the contact has no threads", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       threadList: [],
     });
@@ -467,10 +506,9 @@ describe("HubSpot workflows service", () => {
         hubSpotMessageId: "message-123",
       },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
-    expect(hubSpot.getConversationThreadMessages).not.toHaveBeenCalled();
+    expect(getConversationThreadMessages).not.toHaveBeenCalled();
     const firstUpdateCall = update.mock.calls[0]?.[0];
     expect(
       firstUpdateCall.data.enrichmentInputContext.currentConversationSession,
@@ -480,7 +518,7 @@ describe("HubSpot workflows service", () => {
   test("captures contact-created Enrichment Input Context from current HubSpot contact truth", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       contact: {
         id: "123",
         properties: {
@@ -507,13 +545,12 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
-    expect(hubSpot.getConversationThread).not.toHaveBeenCalled();
-    expect(hubSpot.listConversationThreads).not.toHaveBeenCalled();
-    expect(hubSpot.getConversationThreadMessages).not.toHaveBeenCalled();
-    expect(hubSpot.getContact).toHaveBeenCalledWith("123", {
+    expect(getConversationThread).not.toHaveBeenCalled();
+    expect(listConversationThreads).not.toHaveBeenCalled();
+    expect(getConversationThreadMessages).not.toHaveBeenCalled();
+    expect(getContact).toHaveBeenCalledWith("123", {
       properties: expect.arrayContaining([
         "email",
         "firstname",
@@ -553,7 +590,7 @@ describe("HubSpot workflows service", () => {
   test("stores contact-created Enrichment Input Context as bounded operational trace, not current contact state", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       contact: {
         id: "123",
         properties: {
@@ -578,12 +615,11 @@ describe("HubSpot workflows service", () => {
       rawWebhook: {
         eventId: 1001,
       },
-      hubSpot,
     });
 
-    expect(hubSpot.getConversationThread).not.toHaveBeenCalled();
-    expect(hubSpot.listConversationThreads).not.toHaveBeenCalled();
-    expect(hubSpot.getConversationThreadMessages).not.toHaveBeenCalled();
+    expect(getConversationThread).not.toHaveBeenCalled();
+    expect(listConversationThreads).not.toHaveBeenCalled();
+    expect(getConversationThreadMessages).not.toHaveBeenCalled();
     const firstUpdateCall = update.mock.calls[0]?.[0];
     expect(firstUpdateCall).toMatchObject({
       where: { id: "workflow-run-1" },
@@ -619,7 +655,7 @@ describe("HubSpot workflows service", () => {
         reason: "New contact arrived without enrichable signal yet.",
       }),
     );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       contact: {
         id: "123",
         properties: { email: "ada@example.com" },
@@ -633,7 +669,6 @@ describe("HubSpot workflows service", () => {
       hubSpotWebhookEventId: "hubspot-event-1",
       normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
     expect(messagesCreate).toHaveBeenCalledTimes(1);
@@ -690,7 +725,7 @@ describe("HubSpot workflows service", () => {
           note: "Hot lead from Zillow.",
         }),
       );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       contact: { id: "123", properties: { email: "ada@example.com" } },
     });
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
@@ -701,7 +736,6 @@ describe("HubSpot workflows service", () => {
       hubSpotWebhookEventId: "hubspot-event-1",
       normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
     expect(messagesCreate).toHaveBeenCalledTimes(2);
@@ -747,7 +781,7 @@ describe("HubSpot workflows service", () => {
           fieldUpdates: [{ name: "made_up_two", value: "y" }],
         }),
       );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       contact: { id: "123", properties: { email: "ada@example.com" } },
     });
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
@@ -759,7 +793,6 @@ describe("HubSpot workflows service", () => {
         hubSpotWebhookEventId: "hubspot-event-1",
         normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
         rawWebhook: { eventId: 1001 },
-        hubSpot,
       }),
     ).rejects.toThrow(/valid HubSpot Writeback Plan/);
 
@@ -793,7 +826,7 @@ describe("HubSpot workflows service", () => {
     messagesCreate
       .mockRejectedValueOnce(new Error("connect ECONNRESET"))
       .mockRejectedValueOnce(new Error("connect ECONNRESET"));
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       contact: { id: "123", properties: { email: "ada@example.com" } },
     });
     const { handleHubSpotWebhookEvent } = await importWithRequiredEnv(() =>
@@ -805,7 +838,6 @@ describe("HubSpot workflows service", () => {
         hubSpotWebhookEventId: "hubspot-event-1",
         normalizedEvent: { type: "contact.created", hubSpotObjectId: "123" },
         rawWebhook: { eventId: 1001 },
-        hubSpot,
       }),
     ).rejects.toThrow(/valid HubSpot Writeback Plan/);
 
@@ -842,7 +874,7 @@ describe("HubSpot workflows service", () => {
         note: "Suggested reply: thanks for reaching out — happy to set up a viewing this weekend.",
       }),
     );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       contact: { id: "contact-7", properties: { email: "ada@example.com" } },
     });
@@ -858,7 +890,6 @@ describe("HubSpot workflows service", () => {
         hubSpotMessageId: "msg-trigger",
       },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
     expect(messagesCreate).toHaveBeenCalledTimes(1);
@@ -897,7 +928,7 @@ describe("HubSpot workflows service", () => {
   test("passes the Current Conversation Session and triggering message id to the Claude prompt for inbound-message runs", async () => {
     upsert.mockResolvedValue({ id: "workflow-run-1" });
     update.mockResolvedValue({});
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       threadList: [
         { id: "thread-1", associatedContactId: "contact-7" },
@@ -927,7 +958,6 @@ describe("HubSpot workflows service", () => {
         hubSpotMessageId: "msg-c",
       },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
     const promptInput = messagesCreate.mock.calls[0]?.[0];
@@ -950,7 +980,7 @@ describe("HubSpot workflows service", () => {
         note: "Hi Ada — yes the property is still available. Want to book a tour Saturday at 11?",
       }),
     );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       contact: { id: "contact-7", properties: { email: "ada@example.com" } },
     });
@@ -966,7 +996,6 @@ describe("HubSpot workflows service", () => {
         hubSpotMessageId: "msg-trigger",
       },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
     const writebackUpdate = update.mock.calls
@@ -995,7 +1024,7 @@ describe("HubSpot workflows service", () => {
         reason: "Inbound message is a thank-you; nothing to enrich.",
       }),
     );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       contact: { id: "contact-7", properties: { email: "ada@example.com" } },
     });
@@ -1011,7 +1040,6 @@ describe("HubSpot workflows service", () => {
         hubSpotMessageId: "msg-trigger",
       },
       rawWebhook: { eventId: 1001 },
-      hubSpot,
     });
 
     const writebackUpdate = update.mock.calls
@@ -1048,7 +1076,7 @@ describe("HubSpot workflows service", () => {
           fieldUpdates: [{ name: "made_up_inbound_two", value: "y" }],
         }),
       );
-    const hubSpot = stubInboundMessageHubSpot({
+    configureInboundMessageHubSpot({
       thread: { id: "thread-1", associatedContactId: "contact-7" },
       contact: { id: "contact-7", properties: { email: "ada@example.com" } },
     });
@@ -1065,7 +1093,6 @@ describe("HubSpot workflows service", () => {
           hubSpotMessageId: "msg-trigger",
         },
         rawWebhook: { eventId: 1001 },
-        hubSpot,
       }),
     ).rejects.toThrow(/valid HubSpot Writeback Plan/);
 
@@ -1128,51 +1155,3 @@ describe("HubSpot workflows service", () => {
     });
   });
 });
-
-type HubSpotWorkflowStub = Pick<
-  HubSpotClient,
-  | "getContact"
-  | "getConversationThread"
-  | "listConversationThreads"
-  | "getConversationThreadMessages"
->;
-
-function stubInboundMessageHubSpot(overrides: {
-  thread?: HubSpotConversationThread;
-  contact?: HubSpotContact;
-  threadList?: HubSpotConversationThread[];
-  threadMessages?: Record<string, HubSpotConversationThreadMessages>;
-} = {}): HubSpotWorkflowStub {
-  const thread: HubSpotConversationThread =
-    overrides.thread ?? { id: "thread-1", associatedContactId: "contact-1" };
-  const contact: HubSpotContact =
-    overrides.contact ?? {
-      id: thread.associatedContactId ?? "contact-1",
-      properties: {},
-    };
-  const threadList: HubSpotConversationThread[] =
-    overrides.threadList ?? [thread];
-  const threadMessages = overrides.threadMessages ?? {};
-
-  const getConversationThread = vi.fn<HubSpotClient["getConversationThread"]>(
-    async () => thread,
-  );
-  const getContact = vi.fn<HubSpotClient["getContact"]>(async () => contact);
-  const listConversationThreads = vi.fn<
-    HubSpotClient["listConversationThreads"]
-  >(async (): Promise<HubSpotConversationThreadList> => ({
-    results: threadList,
-  }));
-  const getConversationThreadMessages = vi.fn<
-    HubSpotClient["getConversationThreadMessages"]
-  >(async (threadId): Promise<HubSpotConversationThreadMessages> =>
-    threadMessages[threadId] ?? { results: [] },
-  );
-
-  return {
-    getConversationThread,
-    getContact,
-    listConversationThreads,
-    getConversationThreadMessages,
-  };
-}

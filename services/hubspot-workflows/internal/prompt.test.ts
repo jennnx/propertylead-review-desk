@@ -1,3 +1,6 @@
+// Per ADR 0012: focused internal test of a pure prompt-builder transform whose
+// catalog/tool-schema contract the barrel test cannot reach without contortion.
+
 import { describe, expect, test } from "vitest";
 
 import { importWithRequiredEnv } from "@/tests/env";

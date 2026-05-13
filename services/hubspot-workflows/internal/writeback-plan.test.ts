@@ -1,3 +1,7 @@
+// Per ADR 0012: focused internal test of a pure validator transform; covers
+// fine-grained accept/reject contracts the barrel test exercises only by
+// proxy through Claude retry paths.
+
 import { describe, expect, test } from "vitest";
 
 import { importWithRequiredEnv } from "@/tests/env";
