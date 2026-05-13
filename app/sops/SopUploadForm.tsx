@@ -27,7 +27,7 @@ export function SopUploadForm() {
           className="h-9 min-w-0 rounded-md border border-input bg-background px-3 py-1 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs file:font-medium file:text-secondary-foreground"
           name="file"
           type="file"
-          accept=".txt,text/plain"
+          accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
           required
           aria-describedby="sop-upload-message"
         />
