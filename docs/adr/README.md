@@ -20,3 +20,4 @@ Add a new ADR when a decision (a) is unlikely to change soon and (b) wouldn't be
 | 0010 | [Store enrichment workflow trace, not local current lead state](0010-operational-trace-without-local-enrichment-state.md) | Accepted |
 | 0011 | [First Writable HubSpot Property Catalog](0011-first-writable-hubspot-property-catalog.md) | Accepted |
 | 0012 | [Function parameters describe product contracts, not test seams](0012-function-parameters-describe-product-contracts.md) | Accepted |
+| 0013 | [SOP Documents use small recursive chunks for bounded retrieval context](0013-sop-document-chunking-strategy.md) | Accepted |
