@@ -101,6 +101,13 @@ model HubSpotWriteback {
   @@map("hubspot_writebacks")
 }
 
+model HubSpotWritebackSettings {
+  id              String  @id @default("global")
+  autoModeEnabled Boolean @default(false)
+
+  @@map("hubspot_writeback_settings")
+}
+
 model SopDocument {
   id               String                      @id @default(cuid())
   originalFilename String

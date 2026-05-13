@@ -125,6 +125,17 @@ export type HubSpotWritebackReviewDetail = HubSpotWritebackReviewItem & {
   enrichmentInputContext: unknown;
 };
 
+const HUBSPOT_WRITEBACK_SETTINGS_ID = "global";
+
+export async function getHubSpotWritebackAutoModeEnabled(): Promise<boolean> {
+  const row = await getPrismaClient().hubSpotWritebackSettings.findUnique({
+    where: { id: HUBSPOT_WRITEBACK_SETTINGS_ID },
+    select: { autoModeEnabled: true },
+  });
+
+  return row?.autoModeEnabled ?? false;
+}
+
 export async function findHubSpotWritebackForApproval(
   id: string,
 ): Promise<HubSpotWritebackForApproval | null> {
