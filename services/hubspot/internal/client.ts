@@ -1,13 +1,10 @@
 import { env } from "@/lib/env";
 
-export type HubSpotFetch = (
-  input: string,
-  init?: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string;
-  },
-) => Promise<Response>;
+type HubSpotFetchInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+};
 
 export type HubSpotContact = {
   id: string;
@@ -102,7 +99,7 @@ function createHubSpotClient(): HubSpotClient {
       searchParams?: URLSearchParams;
     } = {},
   ): Promise<T> => {
-    const init: NonNullable<Parameters<HubSpotFetch>[1]> = {
+    const init: HubSpotFetchInit = {
       headers: authHeaders(),
     };
 

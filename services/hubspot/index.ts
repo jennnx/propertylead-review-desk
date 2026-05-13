@@ -8,7 +8,6 @@ export {
   type HubSpotConversationThread,
   type HubSpotConversationThreadList,
   type HubSpotConversationThreadMessages,
-  type HubSpotFetch,
   type ListHubSpotConversationThreadsInput,
 } from "./internal/client";
 export {
