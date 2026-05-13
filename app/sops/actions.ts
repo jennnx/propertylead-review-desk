@@ -22,7 +22,7 @@ export async function uploadSopDocumentAction(
   if (!(file instanceof File)) {
     return {
       status: "error",
-      message: "Choose a .txt SOP Document to upload.",
+      message: "Choose a .txt, .md, or .pdf SOP Document to upload.",
     };
   }
 
