@@ -65,7 +65,7 @@ export async function uploadSopDocument(
       },
       jobOptions: {
         attempts: 1,
-        jobId: `sop-ingest:${document.id}`,
+        jobId: `sop-ingest-${document.id}`,
       },
     });
   } catch (error) {

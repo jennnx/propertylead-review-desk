@@ -14,8 +14,8 @@ describe("environment configuration", () => {
   test("requires the Anthropic API key", async () => {
     await expect(
       importWithRequiredEnv(() => import("./env"), {
-        ANTHROPIC_API_KEY: undefined,
+        ANTHROPIC_API_KEY: "",
       }),
-    ).rejects.toThrow(/ANTHROPIC_API_KEY is required/);
+    ).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 });

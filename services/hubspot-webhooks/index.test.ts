@@ -99,7 +99,7 @@ describe("HubSpot Webhooks service", () => {
       jobName: "hubspot.webhook.process",
       data: { hubSpotWebhookEventId: "hubspot-event-1" },
       jobOptions: {
-        jobId: "hubspot-webhook-event:hubspot-event-1",
+        jobId: "hubspot-webhook-event-hubspot-event-1",
       },
     });
   });
@@ -266,7 +266,7 @@ describe("HubSpot Webhooks service", () => {
       jobName: "hubspot.webhook.process",
       data: { hubSpotWebhookEventId: "existing-new-hubspot-event" },
       jobOptions: {
-        jobId: "hubspot-webhook-event:existing-new-hubspot-event",
+        jobId: "hubspot-webhook-event-existing-new-hubspot-event",
       },
     });
   });

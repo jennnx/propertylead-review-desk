@@ -54,7 +54,7 @@ describe("Queue service", () => {
         hubSpotWebhookEventId: "hubspot-event-retry",
       },
       jobOptions: {
-        jobId: "hubspot-webhook-event:hubspot-event-retry",
+        jobId: "hubspot-webhook-event-hubspot-event-retry",
       },
     });
     await vi.runAllTimersAsync();
@@ -67,7 +67,7 @@ describe("Queue service", () => {
         hubSpotWebhookEventId: "hubspot-event-retry",
       },
       {
-        jobId: "hubspot-webhook-event:hubspot-event-retry",
+        jobId: "hubspot-webhook-event-hubspot-event-retry",
       },
     );
     expect(queueClose).toHaveBeenCalledTimes(1);

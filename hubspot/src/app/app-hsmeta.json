@@ -10,6 +10,11 @@
       "requiredScopes": ["crm.objects.contacts.read", "conversations.read"],
       "optionalScopes": [],
       "conditionallyRequiredScopes": []
+    },
+    "permittedUrls": {
+      "fetch": ["https://app-base-url.example.com"],
+      "iframe": [],
+      "img": []
     }
   }
 }
