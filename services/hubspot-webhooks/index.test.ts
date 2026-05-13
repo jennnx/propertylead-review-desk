@@ -101,8 +101,6 @@ describe("HubSpot Webhooks service", () => {
       jobOptions: {
         jobId: "hubspot-webhook-event:hubspot-event-1",
       },
-      enqueueAttempts: 3,
-      retryDelayMs: 50,
     });
   });
 
@@ -270,8 +268,6 @@ describe("HubSpot Webhooks service", () => {
       jobOptions: {
         jobId: "hubspot-webhook-event:existing-new-hubspot-event",
       },
-      enqueueAttempts: 3,
-      retryDelayMs: 50,
     });
   });
 
