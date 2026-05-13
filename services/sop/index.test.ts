@@ -14,12 +14,11 @@ describe("SOP service", () => {
   });
 
   // TODO: Delete when the SOP operation implementation slices replace these stubs.
-  test("keeps SOP operations unavailable until their implementation slices land", async () => {
+  test("keeps SOP library operations unavailable until their implementation slices land", async () => {
     const {
       deleteSopDocument,
       getSopDocument,
       listSopDocuments,
-      retrieveRelevantSopChunks,
       uploadSopDocument,
     } = await importWithRequiredEnv(() => import("./index"));
 
@@ -34,9 +33,6 @@ describe("SOP service", () => {
     await expect(listSopDocuments()).rejects.toThrow("not implemented");
     await expect(getSopDocument("sop-doc-1")).rejects.toThrow("not implemented");
     await expect(deleteSopDocument("sop-doc-1")).rejects.toThrow(
-      "not implemented",
-    );
-    await expect(retrieveRelevantSopChunks("pricing objection", 3)).rejects.toThrow(
       "not implemented",
     );
   });
