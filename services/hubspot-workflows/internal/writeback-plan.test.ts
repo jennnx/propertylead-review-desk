@@ -111,6 +111,28 @@ describe("HubSpot Writeback Plan validation", () => {
     );
   });
 
+  test("rejects context-only and system-maintained fields", async () => {
+    const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./writeback-plan"),
+    );
+
+    const result = validateHubSpotWritebackPlan({
+      kind: "writeback",
+      fieldUpdates: [
+        { name: "hs_analytics_source", value: "PAID_SOCIAL" },
+        { name: "pd_last_enriched_at", value: "2026-05-13T16:12:00.000Z" },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/hs_analytics_source.*context-only/i),
+        expect.stringMatching(/pd_last_enriched_at.*context-only/i),
+      ]),
+    );
+  });
+
   test("rejects an empty writeback proposal with no field updates and no note", async () => {
     const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
       import("./writeback-plan"),

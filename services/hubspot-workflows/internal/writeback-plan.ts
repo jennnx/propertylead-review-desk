@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { isWritableHubSpotPropertyName } from "@/services/hubspot";
 
+import { isClaudeUpdateableHubSpotPropertyName } from "./claude-updateable-fields";
+
 const fieldUpdateSchema = z.object({
   name: z.string().min(1),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
@@ -53,6 +55,14 @@ const writebackPlanSchema = z
         ctx.addIssue({
           code: "custom",
           message: `field "${update.name}" is not in the Writable HubSpot Property Catalog`,
+        });
+        continue;
+      }
+
+      if (!isClaudeUpdateableHubSpotPropertyName(update.name)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `field "${update.name}" is context-only and cannot be updated by Claude`,
         });
       }
     }
