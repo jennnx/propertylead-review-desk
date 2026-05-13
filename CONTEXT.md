@@ -98,6 +98,22 @@ _Avoid_: Direct AI writeback, final CRM state
 The static, pre-approved set of HubSpot properties PropertyLead Review Desk may propose in HubSpot Writeback Plans.
 _Avoid_: Dynamic property discovery, arbitrary AI-selected fields
 
+**Review Desk**:
+The internal trust-building workspace where an operator (real estate agent, manager, or developer during early fine-tuning) inspects Claude's HubSpot Writeback Plans, approves or rejects each one, and signals repeated mistakes back to the developer so prompts, SOPs, or code can improve. The Review Desk exists primarily to move the customer from "AI we don't yet trust" to "AI we let run"; in steady-state the Review Desk is barely used because Auto-Mode is on. It surfaces what triggered each HubSpot Workflow Run, what Claude proposed, and the context Claude reasoned over — not a HubSpot field editor.
+_Avoid_: Inbox, lead queue, CRM editor, audit log (the audit/history view is part of the Review Desk, not a separate surface)
+
+**Auto-Mode**:
+A global PropertyLead Review Desk setting that, when enabled, causes newly produced HubSpot Writeback Plans to be applied to HubSpot without waiting for an operator approval. Auto-Mode is the intended steady-state of the app — the Review Desk's approval gate is fine-tuning scaffolding that exists to make Auto-Mode safe to leave on. Plans applied in Auto-Mode still surface on the Review Desk in the historical view with a clear indication they were auto-applied. Auto-Mode is read at plan-finalization time, not retroactively: plans already awaiting an operator decision when Auto-Mode is toggled on remain awaiting that decision.
+_Avoid_: Auto-pilot, headless mode, silent writeback (Auto-Mode is still observable on the Review Desk)
+
+**HubSpot Writeback**:
+The durable record of PropertyLead Review Desk's outbound mutation against HubSpot for a single HubSpot Workflow Run. A HubSpot Writeback is the integration-boundary peer of a HubSpot Webhook Event — webhook events represent HubSpot telling us something; HubSpot Writebacks represent us telling HubSpot something. Each HubSpot Writeback carries the HubSpot Writeback Plan produced by its run and records whether that plan was applied to HubSpot (by operator approval or by Auto-Mode), rejected by an operator, plus any optional operator feedback note left for the developer.
+_Avoid_: Writeback action, application, mutation log (the HubSpot Writeback is the single durable record of the act); operator decision (the decision is a state on the HubSpot Writeback, not a separate entity)
+
+**Review Desk Feedback Note**:
+An optional free-text note an operator may attach to a HubSpot Writeback — most commonly on a rejection — explaining why Claude's plan was wrong, so the developer can adjust prompts, SOPs, or code. Feedback Notes exist for the developer's benefit during the trust-building phase; they do not influence HubSpot behavior and the rejection action itself never requires one.
+_Avoid_: Rejection reason, operator comment, structured feedback category (notes are free text; no taxonomy in v1)
+
 ## Relationships
 
 - A **HubSpot Webhook Event** may later produce or update a lead review workflow, but ingestion does not decide that mapping.
@@ -118,6 +134,11 @@ _Avoid_: Dynamic property discovery, arbitrary AI-selected fields
 - A duplicate delivery of an unprocessed stored **HubSpot Webhook Event** may repair or confirm its **HubSpot Webhook Processing Job**.
 - A **HubSpot Integration** receives **HubSpot Webhook Events** from exactly one HubSpot account.
 - A **HubSpot Integration** has exactly one **HubSpot Webhook URL**.
+- A **HubSpot Workflow Run** that finalizes with a **HubSpot Writeback Plan** produces exactly one **HubSpot Writeback**, created eagerly at finalization. A run that decides no writeback is needed produces zero.
+- A **HubSpot Writeback** is either applied to HubSpot — by operator approval or by **Auto-Mode** — or rejected by an operator. Rejections do not call HubSpot.
+- A transient HubSpot API error during a **HubSpot Writeback** execution does not change the writeback's state; the error is surfaced inline to the operator so they can retry. PropertyLead Review Desk records no persisted failure state for the writeback and performs no automatic retry or rollback.
+- A **HubSpot Writeback** may carry an optional **Review Desk Feedback Note**, attachable at any time after the writeback is decided.
+- A **HubSpot Webhook Event** is the integration-boundary inbound record; a **HubSpot Writeback** is its outbound peer. **HubSpot Workflow Run** is internal processing state between them and never carries outbound execution status itself.
 
 ## Flagged ambiguities
 
