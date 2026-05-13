@@ -7,41 +7,77 @@ const fieldUpdateSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
 });
 
-const rawWritebackPlanSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("writeback"),
-    fieldUpdates: z.array(fieldUpdateSchema).optional(),
-    note: z.string().min(1).optional(),
-  }),
-  z
-    .object({
+const writebackPlanSchema = z
+  .discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("writeback"),
+      fieldUpdates: z.array(fieldUpdateSchema).optional(),
+      note: z.string().min(1).optional(),
+    }),
+    z.looseObject({
       kind: z.literal("no_writeback"),
       reason: z.string().min(1),
       fieldUpdates: z.array(fieldUpdateSchema).optional(),
       note: z.string().optional(),
-    })
-    .passthrough(),
-]);
+    }),
+  ])
+  .superRefine((plan, ctx) => {
+    if (plan.kind === "no_writeback") {
+      const carriesWrites =
+        (plan.fieldUpdates && plan.fieldUpdates.length > 0) ||
+        (typeof plan.note === "string" && plan.note.length > 0);
+      if (carriesWrites) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "no_writeback plans must not carry proposed field updates or a note",
+        });
+      }
+      return;
+    }
 
-export type HubSpotWritebackPlanFieldUpdate = {
-  name: string;
-  value: string | number | boolean | null;
-};
+    const fieldUpdates = plan.fieldUpdates ?? [];
+    const note = plan.note ?? null;
 
-export type HubSpotWritebackProposal = {
-  kind: "writeback";
-  fieldUpdates: HubSpotWritebackPlanFieldUpdate[];
-  note: string | null;
-};
+    if (fieldUpdates.length === 0 && note === null) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "writeback plans must include at least one field update or a note (empty plan)",
+      });
+      return;
+    }
 
-export type HubSpotNoWritebackProposal = {
-  kind: "no_writeback";
-  reason: string;
-};
+    for (const update of fieldUpdates) {
+      if (!isWritableHubSpotPropertyName(update.name)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `field "${update.name}" is not in the Writable HubSpot Property Catalog`,
+        });
+      }
+    }
+  })
+  .transform((plan) => {
+    if (plan.kind === "no_writeback") {
+      return { kind: "no_writeback" as const, reason: plan.reason };
+    }
+    return {
+      kind: "writeback" as const,
+      fieldUpdates: plan.fieldUpdates ?? [],
+      note: plan.note ?? null,
+    };
+  });
 
-export type HubSpotWritebackPlan =
-  | HubSpotWritebackProposal
-  | HubSpotNoWritebackProposal;
+export type HubSpotWritebackPlanFieldUpdate = z.infer<typeof fieldUpdateSchema>;
+export type HubSpotWritebackPlan = z.infer<typeof writebackPlanSchema>;
+export type HubSpotWritebackProposal = Extract<
+  HubSpotWritebackPlan,
+  { kind: "writeback" }
+>;
+export type HubSpotNoWritebackProposal = Extract<
+  HubSpotWritebackPlan,
+  { kind: "no_writeback" }
+>;
 
 export type HubSpotWritebackPlanValidationResult =
   | { ok: true; plan: HubSpotWritebackPlan }
@@ -50,56 +86,12 @@ export type HubSpotWritebackPlanValidationResult =
 export function validateHubSpotWritebackPlan(
   raw: unknown,
 ): HubSpotWritebackPlanValidationResult {
-  const parsed = rawWritebackPlanSchema.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      errors: parsed.error.issues.map((issue) => issue.message),
-    };
+  const result = writebackPlanSchema.safeParse(raw);
+  if (result.success) {
+    return { ok: true, plan: result.data };
   }
-
-  if (parsed.data.kind === "no_writeback") {
-    const carriesWrites =
-      (parsed.data.fieldUpdates && parsed.data.fieldUpdates.length > 0) ||
-      (typeof parsed.data.note === "string" && parsed.data.note.length > 0);
-    if (carriesWrites) {
-      return {
-        ok: false,
-        errors: [
-          "no_writeback plans must not carry proposed field updates or a note",
-        ],
-      };
-    }
-    return { ok: true, plan: { kind: "no_writeback", reason: parsed.data.reason } };
-  }
-
-  const fieldUpdates = parsed.data.fieldUpdates ?? [];
-  const note = parsed.data.note ?? null;
-
-  if (fieldUpdates.length === 0 && note === null) {
-    return {
-      ok: false,
-      errors: [
-        "writeback plans must include at least one field update or a note (empty plan)",
-      ],
-    };
-  }
-
-  const offendingNames = fieldUpdates
-    .map((update) => update.name)
-    .filter((name) => !isWritableHubSpotPropertyName(name));
-  if (offendingNames.length > 0) {
-    return {
-      ok: false,
-      errors: offendingNames.map(
-        (name) =>
-          `field "${name}" is not in the Writable HubSpot Property Catalog`,
-      ),
-    };
-  }
-
   return {
-    ok: true,
-    plan: { kind: "writeback", fieldUpdates, note },
+    ok: false,
+    errors: result.error.issues.map((issue) => issue.message),
   };
 }

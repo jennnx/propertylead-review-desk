@@ -3,7 +3,10 @@ import {
   type WritableHubSpotPropertyCatalogEntry,
 } from "@/services/hubspot";
 
-import type { HubSpotWorkflowRunContactCreatedEnrichmentInputContext } from "./mutations";
+import type {
+  HubSpotWorkflowRunContactCreatedEnrichmentInputContext,
+  HubSpotWorkflowRunInboundMessageEnrichmentInputContext,
+} from "./mutations";
 
 export type HubSpotWritebackPlanToolSchema = {
   name: string;
@@ -52,7 +55,70 @@ export function buildContactCreatedWritebackPlanPrompt(input: {
     "```",
   ].join("\n");
 
-  const tool: HubSpotWritebackPlanToolSchema = {
+  return {
+    model: input.model,
+    system,
+    userMessage,
+    tool: buildWritebackPlanTool(),
+  };
+}
+
+export function buildInboundMessageWritebackPlanPrompt(input: {
+  enrichmentInputContext: HubSpotWorkflowRunInboundMessageEnrichmentInputContext;
+  model: string;
+}): HubSpotWritebackPlanPromptMaterial {
+  const catalogDescription = formatCatalogForPrompt(
+    WRITABLE_HUBSPOT_PROPERTY_CATALOG,
+  );
+
+  const system = [
+    "You are PropertyLead Review Desk's enrichment planner.",
+    "An inbound HubSpot Conversations message arrived for a contact. You receive the current HubSpot contact and the recent conversation session (across all of the contact's threads) and propose a HubSpot Writeback Plan.",
+    "A writeback proposal contains at least one field update or a note (or both).",
+    "Field updates must target only properties from the Writable HubSpot Property Catalog below.",
+    "If a suggested reply would help the operator, include it inside the note. Do not invent a separate field for replies; suggested replies live inside the note text.",
+    "If there is nothing meaningful to enrich and no useful note to add, return a no_writeback plan with a short reason.",
+    "Never invent property names; never include both no_writeback and proposed writes.",
+    "",
+    "Conversation message direction is INCOMING when the contact sent the message and OUTGOING when our side sent it. truncationStatus indicates whether HubSpot truncated the message content.",
+    "",
+    "Writable HubSpot Property Catalog:",
+    catalogDescription,
+  ].join("\n");
+
+  const userMessage = [
+    "An inbound HubSpot Conversations message was received. Propose a HubSpot Writeback Plan.",
+    "",
+    "Triggering message id:",
+    "```",
+    input.enrichmentInputContext.triggeringMessageId,
+    "```",
+    "",
+    "Current HubSpot contact:",
+    "```json",
+    JSON.stringify(input.enrichmentInputContext.contact, null, 2),
+    "```",
+    "",
+    "Current Conversation Session:",
+    "```json",
+    JSON.stringify(
+      input.enrichmentInputContext.currentConversationSession,
+      null,
+      2,
+    ),
+    "```",
+  ].join("\n");
+
+  return {
+    model: input.model,
+    system,
+    userMessage,
+    tool: buildWritebackPlanTool(),
+  };
+}
+
+function buildWritebackPlanTool(): HubSpotWritebackPlanToolSchema {
+  return {
     name: HUBSPOT_WRITEBACK_PLAN_TOOL_NAME,
     description:
       "Propose a HubSpot Writeback Plan for the current HubSpot contact.",
@@ -97,13 +163,6 @@ export function buildContactCreatedWritebackPlanPrompt(input: {
         },
       ],
     },
-  };
-
-  return {
-    model: input.model,
-    system,
-    userMessage,
-    tool,
   };
 }
 

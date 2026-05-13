@@ -1,11 +1,17 @@
+import { z } from "zod";
+
 import { claude, DEFAULT_CLAUDE_MODEL } from "@/services/claude";
 
 import {
   buildContactCreatedWritebackPlanPrompt,
+  buildInboundMessageWritebackPlanPrompt,
   HUBSPOT_WRITEBACK_PLAN_TOOL_NAME,
   type HubSpotWritebackPlanPromptMaterial,
 } from "./prompt";
-import type { HubSpotWorkflowRunContactCreatedEnrichmentInputContext } from "./mutations";
+import type {
+  HubSpotWorkflowRunContactCreatedEnrichmentInputContext,
+  HubSpotWorkflowRunInboundMessageEnrichmentInputContext,
+} from "./mutations";
 import {
   validateHubSpotWritebackPlan,
   type HubSpotWritebackPlan,
@@ -32,7 +38,22 @@ export async function requestContactCreatedWritebackPlan(input: {
     enrichmentInputContext: input.enrichmentInputContext,
     model: DEFAULT_CLAUDE_MODEL,
   });
+  return requestWritebackPlan(material);
+}
 
+export async function requestInboundMessageWritebackPlan(input: {
+  enrichmentInputContext: HubSpotWorkflowRunInboundMessageEnrichmentInputContext;
+}): Promise<HubSpotWritebackPlanRequestResult> {
+  const material = buildInboundMessageWritebackPlanPrompt({
+    enrichmentInputContext: input.enrichmentInputContext,
+    model: DEFAULT_CLAUDE_MODEL,
+  });
+  return requestWritebackPlan(material);
+}
+
+async function requestWritebackPlan(
+  material: HubSpotWritebackPlanPromptMaterial,
+): Promise<HubSpotWritebackPlanRequestResult> {
   const rawOutputs: unknown[] = [];
   const validations: HubSpotWritebackPlanValidationTrace[] = [];
   let acceptedPlan: HubSpotWritebackPlan | null = null;
@@ -80,17 +101,27 @@ export async function requestContactCreatedWritebackPlan(input: {
   };
 }
 
+const claudeToolUseBlockSchema = z.object({
+  type: z.literal("tool_use"),
+  name: z.string(),
+  input: z.unknown(),
+});
+
+const claudeMessageResponseSchema = z.object({
+  content: z.array(z.unknown()).optional(),
+});
+
 function extractToolUseInput(response: unknown): unknown {
-  const content =
-    (response as { content?: unknown[] }).content ?? [];
-  for (const block of content) {
+  const parsedResponse = claudeMessageResponseSchema.safeParse(response);
+  if (!parsedResponse.success) return null;
+
+  for (const block of parsedResponse.data.content ?? []) {
+    const toolUse = claudeToolUseBlockSchema.safeParse(block);
     if (
-      block &&
-      typeof block === "object" &&
-      (block as { type?: string }).type === "tool_use" &&
-      (block as { name?: string }).name === HUBSPOT_WRITEBACK_PLAN_TOOL_NAME
+      toolUse.success &&
+      toolUse.data.name === HUBSPOT_WRITEBACK_PLAN_TOOL_NAME
     ) {
-      return (block as { input?: unknown }).input ?? null;
+      return toolUse.data.input ?? null;
     }
   }
   return null;

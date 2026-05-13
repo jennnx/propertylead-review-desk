@@ -50,11 +50,12 @@ export async function handleHubSpotWebhookEvent({
       });
       acceptedPlan = result.plan;
     } else if (workflowEvent.type === "conversation.message.received") {
-      await handleInboundMessageWorkflowEvent({
+      const result = await handleInboundMessageWorkflowEvent({
         runId: run.id,
         workflowEvent,
         hubSpot,
       });
+      acceptedPlan = result.plan;
     }
 
     if (acceptedPlan?.kind === "writeback") {
