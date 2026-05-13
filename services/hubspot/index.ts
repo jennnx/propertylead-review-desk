@@ -29,3 +29,7 @@ export {
   type VerifyWritableHubSpotPropertyCatalogInput,
   type VerifyWritableHubSpotPropertyCatalogResult,
 } from "./internal/verify";
+export {
+  verifyWritableHubSpotPropertyCatalogOnBoot,
+  type VerifyWritableHubSpotPropertyCatalogOnBootInput,
+} from "./internal/boot";
