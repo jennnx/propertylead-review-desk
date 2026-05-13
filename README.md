@@ -6,12 +6,26 @@ Next.js web app + BullMQ worker. Postgres (pgvector) + Redis. Docker Compose for
 
 ```bash
 cp .env.example .env
+# Populate the required keys below before continuing — `lib/env.ts` validates
+# at boot and the process will exit non-zero if any are missing.
 docker compose -f docker-compose.deps.yml up -d postgres redis
 pnpm install
 pnpm db:migrate
 pnpm dev          # web on :3000
 pnpm worker:dev   # separate terminal
 ```
+
+**Required env vars before `pnpm dev` / `pnpm worker:dev` will boot:**
+
+| Var | Notes |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Claude API key. |
+| `VOYAGE_API_KEY` | SOP embedding key. |
+| `HUBSPOT_CLIENT_SECRET` | Used to verify HubSpot webhook signatures. |
+| `HUBSPOT_ACCESS_TOKEN` | Used at runtime for HubSpot reads. Must point at a portal whose Writable HubSpot Property Catalog matches `services/hubspot/internal/catalog.ts` — boot verifies the catalog on every start (see [HubSpot setup §5](docs/hubspot-setup.md#5-writable-hubspot-property-catalog)). |
+| `SOP_STORAGE_DIR` | Absolute path for SOP uploads. The default in `.env.example` (`/var/lib/triage-os/sops`) is for the Compose stack; for local dev set it to something writable, e.g. `/tmp/propertylead-review-desk/sops`. |
+
+`APP_BASE_URL`, `DATABASE_URL`, `REDIS_URL` defaults already work against the deps Compose stack.
 
 Using a host Postgres or Redis? Edit `DATABASE_URL` / `REDIS_URL` and drop the matching service from `up -d` (e.g. `up -d postgres` only).
 
