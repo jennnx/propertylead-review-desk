@@ -7,6 +7,7 @@
 
 import "../lib/env";
 import { disconnectPrismaClient } from "../services/database";
+import { verifyWritableHubSpotPropertyCatalogOnBoot } from "../services/hubspot";
 import { QUEUE_NAMES, createWorker, type Worker } from "../services/queue";
 import { processHubSpotWebhookProcess } from "./jobs/hubspot-webhook-process";
 import { disconnectProbeRedis, processInfraSmoke } from "./jobs/infra-smoke";
@@ -85,7 +86,9 @@ async function shutdown(workers: AnyWorker[], signal: string): Promise<void> {
   process.exit(0);
 }
 
-function main(): void {
+async function main(): Promise<void> {
+  await verifyWritableHubSpotPropertyCatalogOnBoot({ processName: "worker" });
+
   const workers = registerWorkers();
   console.log(`worker: started (pid=${process.pid}, queues=${workers.length})`);
 
@@ -96,4 +99,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error("worker: boot failed:", err);
+  process.exit(1);
+});
