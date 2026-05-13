@@ -38,6 +38,8 @@ Use Zod schemas for runtime validation of complicated objects at every service b
 
 For the full rationale, examples, and Next.js route guidance, see [ADR 0008](docs/adr/0008-vertical-services-and-deep-slices.md).
 
+A service's public functions should describe their **product contract**, not the moving parts of their implementation. Inject only what genuinely varies in production. Test-only parameters — `fetch`, `now`, `log`, `errorLog`, `exit`, pluck-typed `Pick<Client, ...>` overrides, default-fallback client injections — do not belong in the signature; tests reach for module-level mocks (`vi.mock`, `vi.stubGlobal`, fake timers, `vi.spyOn`) instead. See [ADR 0012](docs/adr/0012-function-parameters-describe-product-contracts.md).
+
 ## Naming
 
 Infrastructure and deployment docs currently use `Triage OS`. App metadata uses `PropertyLead Review Desk`. Until the product naming is reconciled, use existing terms deliberately and avoid inventing new names in architecture docs.

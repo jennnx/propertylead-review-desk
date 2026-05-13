@@ -19,3 +19,4 @@ Add a new ADR when a decision (a) is unlikely to change soon and (b) wouldn't be
 | 0009 | [Service data access layers are colocated with owning services](0009-colocated-service-data-access-layers.md) | Accepted |
 | 0010 | [Store enrichment workflow trace, not local current lead state](0010-operational-trace-without-local-enrichment-state.md) | Accepted |
 | 0011 | [First Writable HubSpot Property Catalog](0011-first-writable-hubspot-property-catalog.md) | Accepted |
+| 0012 | [Function parameters describe product contracts, not test seams](0012-function-parameters-describe-product-contracts.md) | Accepted |
