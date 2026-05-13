@@ -35,6 +35,7 @@ enum HubSpotWorkflowRunStatus {
 
 enum HubSpotWorkflowRunOutcome {
   NO_WRITEBACK_NEEDED @map("no_writeback_needed")
+  WRITEBACK_PROPOSED  @map("writeback_proposed")
 }
 
 enum SopDocumentProcessingStatus {
@@ -64,6 +65,10 @@ model HubSpotWorkflowRun {
   status                 HubSpotWorkflowRunStatus   @default(IN_PROGRESS)
   outcome                HubSpotWorkflowRunOutcome?
   enrichmentInputContext Json?
+  writebackPlanInput     Json?
+  writebackPlanRawOutputs Json?
+  writebackPlanValidations Json?
+  writebackPlan          Json?
   failureMessage         String?
   completedAt            DateTime?
   createdAt              DateTime                   @default(now())
