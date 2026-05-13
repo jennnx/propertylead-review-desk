@@ -93,6 +93,8 @@ model HubSpotWriteback {
   plan                   Json
   state                  HubSpotWritebackState @default(PENDING)
   reviewDeskFeedbackNote String?
+  appliedAt              DateTime?
+  applicationMetadata    Json?
   createdAt              DateTime              @default(now())
 
   @@index([state, createdAt])

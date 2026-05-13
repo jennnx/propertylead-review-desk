@@ -4,10 +4,12 @@ export {
   type GetHubSpotConversationThreadMessagesInput,
   type HubSpotClient,
   type HubSpotContact,
+  type HubSpotContactPropertyUpdateValue,
   type HubSpotContactProperty,
   type HubSpotConversationThread,
   type HubSpotConversationThreadList,
   type HubSpotConversationThreadMessages,
+  type HubSpotNote,
   type ListHubSpotConversationThreadsInput,
 } from "./internal/client";
 export {

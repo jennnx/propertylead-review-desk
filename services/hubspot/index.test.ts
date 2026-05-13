@@ -69,6 +69,7 @@ describe("HubSpot service", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   test("reads a HubSpot contact with the configured HubSpot Access Token", async () => {
@@ -108,6 +109,88 @@ describe("HubSpot service", () => {
         headers: {
           authorization: `Bearer ${REQUIRED_TEST_ENV.HUBSPOT_ACCESS_TOKEN}`,
           accept: "application/json",
+        },
+      },
+    );
+  });
+
+  test("updates HubSpot contact properties with the configured HubSpot Access Token", async () => {
+    const fetchHubSpot = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "123", properties: {} }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchHubSpot);
+
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
+
+    await hubSpot.updateContactProperties("123", {
+      pd_urgency: "high",
+    });
+
+    expect(fetchHubSpot).toHaveBeenCalledWith(
+      "https://api.hubapi.com/crm/v3/objects/contacts/123",
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          properties: {
+            pd_urgency: "high",
+          },
+        }),
+        headers: {
+          authorization: `Bearer ${REQUIRED_TEST_ENV.HUBSPOT_ACCESS_TOKEN}`,
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+      },
+    );
+  });
+
+  test("creates a HubSpot note associated to a contact", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-13T21:00:00.000Z"));
+    const fetchHubSpot = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "note-123" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchHubSpot);
+
+    const { hubSpot } = await importWithRequiredEnv(() => import("./index"));
+
+    await expect(
+      hubSpot.createContactNote("contact-123", {
+        body: "Jane asked for a Saturday showing.",
+      }),
+    ).resolves.toEqual({ id: "note-123" });
+
+    expect(fetchHubSpot).toHaveBeenCalledWith(
+      "https://api.hubapi.com/crm/v3/objects/notes",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          associations: [
+            {
+              to: { id: "contact-123" },
+              types: [
+                {
+                  associationCategory: "HUBSPOT_DEFINED",
+                  associationTypeId: 202,
+                },
+              ],
+            },
+          ],
+          properties: {
+            hs_note_body: "Jane asked for a Saturday showing.",
+            hs_timestamp: "2026-05-13T21:00:00.000Z",
+          },
+        }),
+        headers: {
+          authorization: `Bearer ${REQUIRED_TEST_ENV.HUBSPOT_ACCESS_TOKEN}`,
+          accept: "application/json",
+          "content-type": "application/json",
         },
       },
     );
