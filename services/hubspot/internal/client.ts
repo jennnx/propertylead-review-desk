@@ -11,6 +11,12 @@ export type HubSpotContact = {
   properties: Record<string, string | null>;
 };
 
+export type HubSpotContactPropertyUpdateValue = string | number | boolean;
+
+export type HubSpotNote = {
+  id: string;
+};
+
 export type GetHubSpotContactInput = {
   properties: string[];
 };
@@ -57,6 +63,7 @@ type HubSpotConversationThreadMessagesPage = {
 const HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE = 100;
 const HUBSPOT_CONVERSATION_THREAD_MESSAGES_PAGE_SIZE = 100;
 const HUBSPOT_CONVERSATION_THREAD_MESSAGES_DEFAULT_LIMIT = 30;
+const HUBSPOT_NOTE_TO_CONTACT_ASSOCIATION_TYPE_ID = 202;
 
 export type HubSpotContactProperty = {
   name: string;
@@ -71,6 +78,14 @@ export type HubSpotClient = {
     contactId: string,
     input: GetHubSpotContactInput,
   ) => Promise<HubSpotContact>;
+  updateContactProperties: (
+    contactId: string,
+    properties: Record<string, HubSpotContactPropertyUpdateValue>,
+  ) => Promise<void>;
+  createContactNote: (
+    contactId: string,
+    input: { body: string },
+  ) => Promise<HubSpotNote>;
   getConversationThread: (
     threadId: string,
   ) => Promise<HubSpotConversationThread>;
@@ -95,6 +110,7 @@ function createHubSpotClient(): HubSpotClient {
   const request = async <T>(
     path: string,
     input: {
+      body?: unknown;
       method?: string;
       searchParams?: URLSearchParams;
     } = {},
@@ -104,6 +120,13 @@ function createHubSpotClient(): HubSpotClient {
     };
 
     if (input.method) init.method = input.method;
+    if (input.body !== undefined) {
+      init.body = JSON.stringify(input.body);
+      init.headers = {
+        ...init.headers,
+        "content-type": "application/json",
+      };
+    }
 
     const response = await globalThis.fetch(
       `${HUBSPOT_BASE_URL}${path}${formatSearchParams(input.searchParams)}`,
@@ -123,6 +146,37 @@ function createHubSpotClient(): HubSpotClient {
           }),
         },
       );
+    },
+    async updateContactProperties(contactId, properties) {
+      await request<HubSpotContact>(
+        `/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        {
+          method: "PATCH",
+          body: { properties },
+        },
+      );
+    },
+    async createContactNote(contactId, input) {
+      return request<HubSpotNote>("/crm/v3/objects/notes", {
+        method: "POST",
+        body: {
+          associations: [
+            {
+              to: { id: contactId },
+              types: [
+                {
+                  associationCategory: "HUBSPOT_DEFINED",
+                  associationTypeId: HUBSPOT_NOTE_TO_CONTACT_ASSOCIATION_TYPE_ID,
+                },
+              ],
+            },
+          ],
+          properties: {
+            hs_note_body: input.body,
+            hs_timestamp: new Date().toISOString(),
+          },
+        },
+      });
     },
     async getConversationThread(threadId) {
       return request<HubSpotConversationThread>(

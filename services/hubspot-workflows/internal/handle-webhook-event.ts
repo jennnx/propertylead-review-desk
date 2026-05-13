@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { recordProposedHubSpotWriteback } from "@/services/hubspot-writebacks";
+
 import { handleContactCreatedWorkflowEvent } from "./handle-contact-created-event";
 import { handleInboundMessageWorkflowEvent } from "./handle-inbound-message-event";
 import {
@@ -51,6 +53,10 @@ export async function handleHubSpotWebhookEvent({
         run.id,
         new Date(),
       );
+      await recordProposedHubSpotWriteback({
+        hubSpotWorkflowRunId: run.id,
+        plan: acceptedPlan,
+      });
     } else {
       await markHubSpotWorkflowRunSucceededWithNoWriteback(run.id, new Date());
     }

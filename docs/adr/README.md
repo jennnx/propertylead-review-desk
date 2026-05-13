@@ -21,3 +21,4 @@ Add a new ADR when a decision (a) is unlikely to change soon and (b) wouldn't be
 | 0011 | [First Writable HubSpot Property Catalog](0011-first-writable-hubspot-property-catalog.md) | Accepted |
 | 0012 | [Function parameters describe product contracts, not test seams](0012-function-parameters-describe-product-contracts.md) | Accepted |
 | 0013 | [SOP Documents use small recursive chunks for bounded retrieval context](0013-sop-document-chunking-strategy.md) | Accepted |
+| 0014 | [HubSpot Writeback is an outbound integration-boundary entity, and the Review Desk is trust-building scaffolding](0014-hubspot-writeback-as-outbound-peer-and-review-desk-as-trust-building-scaffolding.md) | Accepted |
