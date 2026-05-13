@@ -197,9 +197,68 @@ export const WRITABLE_HUBSPOT_PROPERTY_CATALOG = [
 const writablePropertyNames = new Set(
   WRITABLE_HUBSPOT_PROPERTY_CATALOG.map((entry) => entry.name),
 );
+const writablePropertiesByName = new Map(
+  WRITABLE_HUBSPOT_PROPERTY_CATALOG.map((entry) => [entry.name, entry]),
+);
 
 export function isWritableHubSpotPropertyName(name: string): boolean {
   return writablePropertyNames.has(name);
+}
+
+export function getWritableHubSpotPropertyCatalogEntry(
+  name: string,
+): WritableHubSpotPropertyCatalogEntry | null {
+  return writablePropertiesByName.get(name) ?? null;
+}
+
+export function normalizeWritableHubSpotPropertyValue(
+  name: string,
+  value: string | number | boolean | null,
+): string | number | boolean | null {
+  if (name === "hs_timezone" && typeof value === "string") {
+    return formatHubSpotTimeZoneValue(value);
+  }
+  return value;
+}
+
+export function formatHubSpotNoteBody(note: string): string {
+  return note
+    .replace(/\r\n?/g, "\n")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/_([^_\n]+)_/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/^\s*[\u2022*]\s+/gm, "- ")
+    .replace(/([^\n])\s+-\s+/g, "$1\n- ")
+    .split("\n")
+    .map((line) => line.trim().replace(/[ \t]{2,}/g, " "))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function formatHubSpotNoteBodyForApi(note: string): string {
+  return formatHubSpotNoteBody(note).split("\n").map(escapeHtml).join("<br>");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatHubSpotTimeZoneValue(value: string): string {
+  return value
+    .trim()
+    .replace(/\//g, "_slash_")
+    .replace(/-/g, "_hyphen_")
+    .replace(/\s+/g, "_")
+    .toLowerCase();
 }
 
 function textProperty(

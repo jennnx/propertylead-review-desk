@@ -33,6 +33,10 @@ vi.mock("@/services/hubspot", () => ({
     createContactNote,
   },
   isWritableHubSpotPropertyName: (name: string) => name === "pd_urgency",
+  normalizeWritableHubSpotPropertyValue: (
+    _name: string,
+    value: string | number | boolean | null,
+  ) => value,
 }));
 
 describe("HubSpot writebacks service", () => {

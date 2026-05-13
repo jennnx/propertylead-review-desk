@@ -72,6 +72,53 @@ describe("HubSpot Writeback Plan validation", () => {
     });
   });
 
+  test("formats markdown-like notes before accepting a writeback proposal", async () => {
+    const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./writeback-plan"),
+    );
+
+    const result = validateHubSpotWritebackPlan({
+      kind: "writeback",
+      note: '**Sample Buyer** is a buyer. Key signals: - Requested a tour: **Saturday morning** - Suggested reply: *"Does Saturday work?"*',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [],
+        note: [
+          "Sample Buyer is a buyer. Key signals:",
+          "- Requested a tour: Saturday morning",
+          '- Suggested reply: "Does Saturday work?"',
+        ].join("\n"),
+      },
+    });
+  });
+
+  test("formats bullet-symbol notes before accepting a writeback proposal", async () => {
+    const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./writeback-plan"),
+    );
+
+    const result = validateHubSpotWritebackPlan({
+      kind: "writeback",
+      note: '\u2022 Sample Buyer wants to tour **511 Test Road**.\n\u2022 Suggested reply: *"Does Saturday work?"*',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [],
+        note: [
+          "- Sample Buyer wants to tour 511 Test Road.",
+          '- Suggested reply: "Does Saturday work?"',
+        ].join("\n"),
+      },
+    });
+  });
+
   test("accepts a writeback proposal with both a field update and a note", async () => {
     const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
       import("./writeback-plan"),
@@ -91,6 +138,62 @@ describe("HubSpot Writeback Plan validation", () => {
         note: "Caller asked for a tour this weekend.",
       },
     });
+  });
+
+  test("normalizes HubSpot timezone values before accepting a writeback proposal", async () => {
+    const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./writeback-plan"),
+    );
+
+    const result = validateHubSpotWritebackPlan({
+      kind: "writeback",
+      fieldUpdates: [{ name: "hs_timezone", value: "America/Chicago" }],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [{ name: "hs_timezone", value: "america_slash_chicago" }],
+        note: null,
+      },
+    });
+  });
+
+  test("rejects enum values that are not allowed HubSpot option values", async () => {
+    const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./writeback-plan"),
+    );
+
+    const result = validateHubSpotWritebackPlan({
+      kind: "writeback",
+      fieldUpdates: [{ name: "pd_urgency", value: "urgent" }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/pd_urgency.*not an allowed option value/),
+      ]),
+    );
+  });
+
+  test("rejects non-string enum values", async () => {
+    const { validateHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./writeback-plan"),
+    );
+
+    const result = validateHubSpotWritebackPlan({
+      kind: "writeback",
+      fieldUpdates: [{ name: "pd_urgency", value: 1 }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/pd_urgency.*enumeration.*string option value/),
+      ]),
+    );
   });
 
   test("rejects a writeback proposal whose field targets a property outside the catalog", async () => {

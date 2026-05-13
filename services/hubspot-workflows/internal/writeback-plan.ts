@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { isWritableHubSpotPropertyName } from "@/services/hubspot";
+import {
+  formatHubSpotNoteBody,
+  getWritableHubSpotPropertyCatalogEntry,
+  isWritableHubSpotPropertyName,
+  normalizeWritableHubSpotPropertyValue,
+} from "@/services/hubspot";
 
 import { isClaudeUpdateableHubSpotPropertyName } from "./claude-updateable-fields";
 
@@ -51,6 +56,7 @@ const writebackPlanSchema = z
     }
 
     for (const update of fieldUpdates) {
+      const catalogEntry = getWritableHubSpotPropertyCatalogEntry(update.name);
       if (!isWritableHubSpotPropertyName(update.name)) {
         ctx.addIssue({
           code: "custom",
@@ -65,6 +71,34 @@ const writebackPlanSchema = z
           message: `field "${update.name}" is context-only and cannot be updated by Claude`,
         });
       }
+
+      if (
+        catalogEntry?.type === "enumeration" &&
+        update.value !== null &&
+        typeof update.value !== "string"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `field "${update.name}" is an enumeration and must use a string option value or null`,
+        });
+        continue;
+      }
+
+      const normalizedValue = normalizeWritableHubSpotPropertyValue(
+        update.name,
+        update.value,
+      );
+      if (
+        catalogEntry?.options &&
+        normalizedValue !== null &&
+        typeof normalizedValue === "string" &&
+        !catalogEntry.options.includes(normalizedValue)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `field "${update.name}" value "${update.value}" is not an allowed option value`,
+        });
+      }
     }
   })
   .transform((plan) => {
@@ -73,8 +107,11 @@ const writebackPlanSchema = z
     }
     return {
       kind: "writeback" as const,
-      fieldUpdates: plan.fieldUpdates ?? [],
-      note: plan.note ?? null,
+      fieldUpdates: (plan.fieldUpdates ?? []).map((update) => ({
+        ...update,
+        value: normalizeWritableHubSpotPropertyValue(update.name, update.value),
+      })),
+      note: plan.note ? formatHubSpotNoteBody(plan.note) : null,
     };
   });
 

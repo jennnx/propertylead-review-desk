@@ -52,11 +52,15 @@ describe("HubSpot Writeback Plan prompt material", () => {
     expect(material.system).toMatch(/field updates only, a note only, both/);
     expect(material.system).toMatch(/The goal is to be helpful, not noisy/);
     expect(material.system).toMatch(/Keep it brief/);
+    expect(material.system).toMatch(/HubSpot notes are plain text/);
+    expect(material.system).toMatch(/Use real line breaks for bullets/);
+    expect(material.system).toMatch(/Do not use \*\*bold\*\*, \*italics\*/);
     expect(material.system).toMatch(/Do not write a long essay/);
+    expect(material.system).toMatch(/America\/Chicago -> america_slash_chicago/);
     expect(material.system).not.toMatch(/HubSpot Writeback Plan/);
   });
 
-  test("declares a tool with the agreed name and a two-branch oneOf input schema", async () => {
+  test("declares a tool with the agreed name and Anthropic-compatible top-level schema", async () => {
     const {
       buildContactCreatedWritebackPlanPrompt,
       HUBSPOT_WRITEBACK_PLAN_TOOL_NAME,
@@ -74,11 +78,18 @@ describe("HubSpot Writeback Plan prompt material", () => {
 
     expect(material.tool.name).toBe(HUBSPOT_WRITEBACK_PLAN_TOOL_NAME);
     const schema = material.tool.input_schema as unknown as {
-      oneOf: { properties: { kind: { const: string } } }[];
+      properties: { kind: { enum: string[] } };
+      oneOf?: unknown;
+      allOf?: unknown;
+      anyOf?: unknown;
     };
-    expect(schema.oneOf.map((branch) => branch.properties.kind.const).sort()).toEqual(
-      ["no_writeback", "writeback"],
-    );
+    expect(schema.oneOf).toBeUndefined();
+    expect(schema.allOf).toBeUndefined();
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.properties.kind.enum.sort()).toEqual([
+      "no_writeback",
+      "writeback",
+    ]);
   });
 
   test("places the current HubSpot contact JSON into the user message", async () => {

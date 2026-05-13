@@ -102,11 +102,15 @@ function buildSystemPrompt(): string {
     "- Do not repeat existing values unless the new information makes the field more accurate.",
     "- Prefer specific facts from the payload over guesses. Use unknown only when the payload clearly supports that an answer is unknown.",
     "- For enum fields, use exactly one listed allowed value.",
+    "- For hs_timezone, output HubSpot's timezone option value, not an IANA display name: lowercase the timezone and replace / with _slash_ and - with _hyphen_ (example: America/Chicago -> america_slash_chicago).",
     "- Dates and datetimes must use ISO-style values when the payload gives enough information.",
     "",
     "Note rules:",
     "- A note is for the real estate agent assigned to this lead, not for the lead.",
     "- Keep it brief: usually 1-3 bullets or 1 short paragraph.",
+    "- HubSpot notes are plain text. Do not use Markdown or HTML.",
+    "- Use real line breaks for bullets. Put each bullet on its own line starting with '- '.",
+    "- Do not use **bold**, *italics*, headings, Markdown links, or inline bullet lists.",
     "- Include only information that helps the agent decide what to do next faster.",
     "- Good notes may suggest the next action, draft the next reply, or summarize important constraints that are scattered across fields/messages.",
     "- Do not write a long essay. Do not list obvious facts already easy to see in the CRM.",
@@ -126,44 +130,30 @@ function buildWritebackPlanTool(): HubSpotWritebackPlanToolSchema {
       "Return field updates and/or one brief note for the assigned real estate agent.",
     input_schema: {
       type: "object",
-      oneOf: [
-        {
-          type: "object",
-          required: ["kind"],
-          properties: {
-            kind: { const: "writeback" },
-            fieldUpdates: {
-              type: "array",
-              items: {
-                type: "object",
-                required: ["name", "value"],
-                properties: {
-                  name: { type: "string" },
-                  value: {
-                    anyOf: [
-                      { type: "string" },
-                      { type: "number" },
-                      { type: "boolean" },
-                      { type: "null" },
-                    ],
-                  },
-                },
+      required: ["kind"],
+      properties: {
+        kind: {
+          type: "string",
+          enum: ["writeback", "no_writeback"],
+        },
+        fieldUpdates: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name", "value"],
+            properties: {
+              name: { type: "string" },
+              value: {
+                type: ["string", "number", "boolean", "null"],
               },
             },
-            note: { type: "string", minLength: 1 },
+            additionalProperties: false,
           },
-          additionalProperties: false,
         },
-        {
-          type: "object",
-          required: ["kind", "reason"],
-          properties: {
-            kind: { const: "no_writeback" },
-            reason: { type: "string", minLength: 1 },
-          },
-          additionalProperties: false,
-        },
-      ],
+        note: { type: "string", minLength: 1 },
+        reason: { type: "string", minLength: 1 },
+      },
+      additionalProperties: false,
     },
   };
 }

@@ -103,6 +103,91 @@ describe("HubSpot Writeback Plan executor", () => {
     ]);
   });
 
+  test("formats markdown-like Claude notes as readable HubSpot plain text", async () => {
+    const createdNotes: unknown[] = [];
+    const hubSpot = {
+      async getContact() {
+        throw new Error("contact should not be read for a note-only plan");
+      },
+      async updateContactProperties() {
+        throw new Error("contact should not be updated for a note-only plan");
+      },
+      async createContactNote(contactId: string, input: unknown) {
+        createdNotes.push({ contactId, input });
+        return { id: "note-123" };
+      },
+    };
+    const { executeHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./executor"),
+    );
+
+    await executeHubSpotWritebackPlan({
+      contactId: "contact-123",
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [],
+        note: '**Sample Buyer** is a buyer. Key signals: - Requested a tour: **Saturday morning** - Suggested reply: *"Does Saturday work?"*',
+      },
+      hubSpot,
+    });
+
+    expect(createdNotes).toEqual([
+      {
+        contactId: "contact-123",
+        input: {
+          body: [
+            "Sample Buyer is a buyer. Key signals:",
+            "- Requested a tour: Saturday morning",
+            '- Suggested reply: "Does Saturday work?"',
+          ].join("<br>").replace(/"/g, "&quot;"),
+        },
+      },
+    ]);
+  });
+
+  test("normalizes IANA timezone values to HubSpot timezone option values", async () => {
+    const updatedContacts: unknown[] = [];
+    const hubSpot = {
+      async getContact() {
+        return {
+          id: "contact-123",
+          properties: {
+            hs_timezone: null,
+          },
+        };
+      },
+      async updateContactProperties(contactId: string, properties: unknown) {
+        updatedContacts.push({ contactId, properties });
+      },
+      async createContactNote() {
+        throw new Error("note should not be created for a field-only plan");
+      },
+    };
+    const { executeHubSpotWritebackPlan } = await importWithRequiredEnv(() =>
+      import("./executor"),
+    );
+
+    const result = await executeHubSpotWritebackPlan({
+      contactId: "contact-123",
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [{ name: "hs_timezone", value: "America/Chicago" }],
+        note: null,
+      },
+      hubSpot,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updatedContacts).toEqual([
+      {
+        contactId: "contact-123",
+        properties: {
+          hs_timezone: "america_slash_chicago",
+        },
+      },
+    ]);
+  });
+
   test("rejects an out-of-catalog field before calling HubSpot", async () => {
     const hubSpotCalls: string[] = [];
     const hubSpot = {

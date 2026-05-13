@@ -1,5 +1,7 @@
 import {
+  formatHubSpotNoteBodyForApi,
   isWritableHubSpotPropertyName,
+  normalizeWritableHubSpotPropertyValue,
   type HubSpotClient,
 } from "@/services/hubspot";
 import type { HubSpotWritebackProposal } from "@/services/hubspot-workflows";
@@ -65,7 +67,7 @@ export async function executeHubSpotWritebackPlan({
         Object.fromEntries(
           plan.fieldUpdates.map((update) => [
             update.name,
-            formatHubSpotPropertyValue(update.value),
+            formatHubSpotPropertyValue(update.name, update.value),
           ]),
         ),
       );
@@ -75,7 +77,7 @@ export async function executeHubSpotWritebackPlan({
       plan.note === null
         ? null
         : await hubSpot.createContactNote(contactId, {
-            body: plan.note,
+            body: formatHubSpotNoteBodyForApi(plan.note),
           });
 
     return {
@@ -103,7 +105,8 @@ export async function executeHubSpotWritebackPlan({
 }
 
 function formatHubSpotPropertyValue(
+  name: string,
   value: string | number | boolean | null,
 ): string | number | boolean {
-  return value === null ? "" : value;
+  return normalizeWritableHubSpotPropertyValue(name, value) ?? "";
 }

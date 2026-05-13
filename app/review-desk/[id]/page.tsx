@@ -109,7 +109,7 @@ export default async function ReviewDeskDetailPage({
                   </div>
                 ) : null}
                 {writeback.plan.note ? (
-                  <div className="rounded-md border border-border bg-muted/30 p-3 text-sm leading-6">
+                  <div className="whitespace-pre-line rounded-md border border-border bg-muted/30 p-3 text-sm leading-6">
                     {writeback.plan.note}
                   </div>
                 ) : null}
