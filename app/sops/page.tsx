@@ -15,7 +15,7 @@ export default async function SopsPage() {
             <p className="text-sm font-medium text-muted-foreground">
               SOP Library
             </p>
-            <h1 className="text-2xl font-semibold tracking-normal">
+            <h1 className="text-2xl font-semibold tracking-tight">
               SOP Documents
             </h1>
           </div>

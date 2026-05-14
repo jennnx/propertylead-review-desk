@@ -28,11 +28,14 @@ export function AppSidebar({ autoModeEnabled }: { autoModeEnabled: boolean }) {
   const pathname = usePathname();
 
   return (
-    <Sidebar collapsible="none" className="w-60 border-r border-sidebar-border">
+    <Sidebar
+      collapsible="none"
+      className="w-60 border-r border-sidebar-border bg-gradient-to-b from-sidebar to-muted/30"
+    >
       <SidebarHeader>
         <Link
           href="/"
-          className="flex h-10 items-center px-2 text-sm font-semibold"
+          className="flex h-10 items-center px-2 text-sm font-semibold tracking-tight"
         >
           PropertyLead
         </Link>

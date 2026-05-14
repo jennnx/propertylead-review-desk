@@ -56,8 +56,10 @@ export function AutoApproveContainer({ enabled }: { enabled: boolean }) {
     <div
       data-state={checked ? "on" : "off"}
       className={cn(
-        "flex flex-col gap-2 rounded-md border bg-sidebar p-3",
-        checked ? "border-sidebar-border" : "border-sidebar-border/60",
+        "flex flex-col gap-2 rounded-md border bg-sidebar p-3 transition-shadow",
+        checked
+          ? "border-sidebar-foreground/30 shadow-xs"
+          : "border-sidebar-border/50",
       )}
     >
       <div className="flex items-center gap-2">
@@ -68,7 +70,14 @@ export function AutoApproveContainer({ enabled }: { enabled: boolean }) {
             checked ? "bg-emerald-500" : "bg-sidebar-foreground/30",
           )}
         />
-        <p className="text-sm font-medium">Auto-approve</p>
+        <p
+          className={cn(
+            "text-sm",
+            checked ? "font-semibold" : "font-medium text-sidebar-foreground/80",
+          )}
+        >
+          Auto-approve
+        </p>
         <Switch
           aria-label="Auto-approve"
           className="ml-auto"

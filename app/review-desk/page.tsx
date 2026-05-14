@@ -34,7 +34,7 @@ export default async function ReviewDeskPage() {
           </p>
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-semibold tracking-normal">
+              <h1 className="text-2xl font-semibold tracking-tight">
                 Review Desk
               </h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
@@ -52,7 +52,7 @@ export default async function ReviewDeskPage() {
 
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-normal">
+            <h2 className="text-lg font-semibold tracking-tight">
               Pending queue
             </h2>
             <Badge variant="secondary">{pendingWritebacks.length} pending</Badge>
@@ -80,7 +80,7 @@ export default async function ReviewDeskPage() {
 
         <section className="flex flex-col gap-3 border-t border-border pt-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-normal">
+            <h2 className="text-lg font-semibold tracking-tight">
               Decision history
             </h2>
             <Badge variant="outline">{decidedWritebacks.length} decided</Badge>

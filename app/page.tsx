@@ -54,14 +54,14 @@ export default async function Home() {
           <p className="text-sm font-medium text-muted-foreground">
             PropertyLead Review Desk
           </p>
-          <h1 className="text-2xl font-semibold tracking-normal">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="max-w-3xl text-base text-foreground">{headline}</p>
         </header>
 
         <DashboardActivityChart data={activityCounts} />
 
         <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold tracking-normal">
+          <h2 className="text-lg font-semibold tracking-tight">
             Waiting for you
           </h2>
           {pendingPreview.length === 0 ? (
@@ -97,7 +97,7 @@ export default async function Home() {
 
         <section className="flex flex-col gap-3 border-t border-border pt-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-normal">
+            <h2 className="text-lg font-semibold tracking-tight">
               Recent activity
             </h2>
             {recentActivity.length > 0 ? (
