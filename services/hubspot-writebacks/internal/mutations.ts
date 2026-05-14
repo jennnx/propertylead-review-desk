@@ -23,9 +23,11 @@ export async function createPendingHubSpotWriteback(
 export async function markHubSpotWritebackApplied({
   id,
   metadata,
+  reviewDeskFeedbackNote,
 }: {
   id: string;
   metadata: HubSpotWritebackExecutionMetadata;
+  reviewDeskFeedbackNote?: string | null;
 }): Promise<void> {
   await getPrismaClient().hubSpotWriteback.update({
     where: { id },
@@ -33,6 +35,38 @@ export async function markHubSpotWritebackApplied({
       state: "APPLIED",
       appliedAt: new Date(),
       applicationMetadata: metadata as unknown as Prisma.InputJsonValue,
+      ...(reviewDeskFeedbackNote !== undefined ? { reviewDeskFeedbackNote } : {}),
+    },
+  });
+}
+
+export async function markHubSpotWritebackRejected({
+  id,
+  reviewDeskFeedbackNote,
+}: {
+  id: string;
+  reviewDeskFeedbackNote?: string | null;
+}): Promise<void> {
+  await getPrismaClient().hubSpotWriteback.update({
+    where: { id },
+    data: {
+      state: "REJECTED",
+      ...(reviewDeskFeedbackNote !== undefined ? { reviewDeskFeedbackNote } : {}),
+    },
+  });
+}
+
+export async function updateHubSpotWritebackFeedbackNote({
+  id,
+  reviewDeskFeedbackNote,
+}: {
+  id: string;
+  reviewDeskFeedbackNote: string | null;
+}): Promise<void> {
+  await getPrismaClient().hubSpotWriteback.update({
+    where: { id },
+    data: {
+      reviewDeskFeedbackNote,
     },
   });
 }

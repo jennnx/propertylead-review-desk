@@ -163,6 +163,18 @@ export async function listPendingHubSpotWritebackReviewItems(): Promise<
   return rows.map((row) => toReviewDetail(reviewRowSchema.parse(row)));
 }
 
+export async function listDecidedHubSpotWritebackReviewItems(): Promise<
+  HubSpotWritebackReviewItem[]
+> {
+  const rows = await getPrismaClient().hubSpotWriteback.findMany({
+    where: { state: { in: ["APPLIED", "AUTO_APPLIED", "REJECTED"] } },
+    orderBy: { createdAt: "desc" },
+    select: reviewRowSelect,
+  });
+
+  return rows.map((row) => toReviewDetail(reviewRowSchema.parse(row)));
+}
+
 export async function findHubSpotWritebackReviewDetail(
   id: string,
 ): Promise<HubSpotWritebackReviewDetail | null> {

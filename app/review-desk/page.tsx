@@ -12,16 +12,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  listDecidedHubSpotWritebacks,
   listPendingHubSpotWritebacks,
   type HubSpotWritebackReviewItem,
 } from "@/services/hubspot-writebacks";
 
 export default async function ReviewDeskPage() {
-  const writebacks = await listPendingHubSpotWritebacks();
+  const [pendingWritebacks, decidedWritebacks] = await Promise.all([
+    listPendingHubSpotWritebacks(),
+    listDecidedHubSpotWritebacks(),
+  ]);
 
   return (
     <main className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <header className="flex flex-col gap-2 border-b border-border pb-5">
           <p className="text-sm font-medium text-muted-foreground">
             Review Desk
@@ -35,35 +39,71 @@ export default async function ReviewDeskPage() {
                 Review proposed HubSpot changes before they are applied.
               </p>
             </div>
-            <Badge variant="secondary">{writebacks.length} pending</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">
+                {pendingWritebacks.length} pending
+              </Badge>
+              <Badge variant="outline">{decidedWritebacks.length} decided</Badge>
+            </div>
           </div>
         </header>
 
-        {writebacks.length === 0 ? (
-          <div className="flex min-h-52 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border px-4 py-10 text-center">
-            <HugeiconsIcon icon={InboxIcon} strokeWidth={2} />
-            <p className="text-sm font-medium">No pending HubSpot Writebacks</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              New proposed writebacks will appear here after HubSpot Workflows
-              finalize a plan.
-            </p>
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-normal">
+              Pending queue
+            </h2>
+            <Badge variant="secondary">{pendingWritebacks.length} pending</Badge>
           </div>
-        ) : (
-          <div className="grid gap-3">
-            {writebacks.map((writeback) => (
-              <PendingWritebackCard
-                key={writeback.id}
-                writeback={writeback}
-              />
-            ))}
+          {pendingWritebacks.length === 0 ? (
+            <div className="flex min-h-52 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border px-4 py-10 text-center">
+              <HugeiconsIcon icon={InboxIcon} strokeWidth={2} />
+              <p className="text-sm font-medium">No pending HubSpot Writebacks</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                New proposed writebacks will appear here after HubSpot Workflows
+                finalize a plan.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {pendingWritebacks.map((writeback) => (
+                <ReviewDeskWritebackCard
+                  key={writeback.id}
+                  writeback={writeback}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-3 border-t border-border pt-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-normal">
+              Decision history
+            </h2>
+            <Badge variant="outline">{decidedWritebacks.length} decided</Badge>
           </div>
-        )}
+          {decidedWritebacks.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
+              Applied and rejected HubSpot Writebacks will appear here.
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {decidedWritebacks.map((writeback) => (
+                <ReviewDeskWritebackCard
+                  key={writeback.id}
+                  writeback={writeback}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
 }
 
-function PendingWritebackCard({
+function ReviewDeskWritebackCard({
   writeback,
 }: {
   writeback: HubSpotWritebackReviewItem;
@@ -77,7 +117,7 @@ function PendingWritebackCard({
           {writeback.contactEmail ? ` - ${writeback.contactEmail}` : ""}
         </CardDescription>
         <CardAction>
-          <Badge variant="outline">pending</Badge>
+          <DecisionBadge state={writeback.state} />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -98,4 +138,13 @@ function PendingWritebackCard({
       </CardContent>
     </Card>
   );
+}
+
+function DecisionBadge({ state }: { state: HubSpotWritebackReviewItem["state"] }) {
+  if (state === "APPLIED") return <Badge>applied</Badge>;
+  if (state === "REJECTED") return <Badge variant="destructive">rejected</Badge>;
+  if (state === "AUTO_APPLIED") {
+    return <Badge variant="secondary">auto-applied</Badge>;
+  }
+  return <Badge variant="outline">pending</Badge>;
 }

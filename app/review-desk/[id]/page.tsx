@@ -23,7 +23,8 @@ import {
   type HubSpotWritebackReviewDetail,
 } from "@/services/hubspot-writebacks";
 
-import { ReviewDeskApproveButton } from "../ReviewDeskApproveButton";
+import { ReviewDeskDecisionPanel } from "../ReviewDeskDecisionPanel";
+import { ReviewDeskFeedbackNoteEditor } from "../ReviewDeskFeedbackNoteEditor";
 
 export default async function ReviewDeskDetailPage({
   params,
@@ -67,13 +68,28 @@ export default async function ReviewDeskDetailPage({
               <span className="text-xs text-muted-foreground">
                 Created {formatDate(writeback.createdAt)}
               </span>
+              {writeback.appliedAt ? (
+                <span className="text-xs text-muted-foreground">
+                  Applied {formatDate(writeback.appliedAt)}
+                </span>
+              ) : null}
             </div>
           </CardContent>
           {writeback.state === "PENDING" ? (
             <CardFooter>
-              <ReviewDeskApproveButton hubSpotWritebackId={writeback.id} />
+              <ReviewDeskDecisionPanel
+                hubSpotWritebackId={writeback.id}
+                reviewDeskFeedbackNote={writeback.reviewDeskFeedbackNote}
+              />
             </CardFooter>
-          ) : null}
+          ) : (
+            <CardFooter>
+              <ReviewDeskFeedbackNoteEditor
+                hubSpotWritebackId={writeback.id}
+                reviewDeskFeedbackNote={writeback.reviewDeskFeedbackNote}
+              />
+            </CardFooter>
+          )}
         </Card>
 
         <Accordion type="multiple" defaultValue={["plan"]}>

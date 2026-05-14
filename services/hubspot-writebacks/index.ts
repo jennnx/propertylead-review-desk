@@ -1,8 +1,11 @@
 export {
   approveHubSpotWriteback,
   getHubSpotWritebackReview,
+  listDecidedHubSpotWritebacks,
   listPendingHubSpotWritebacks,
   recordProposedHubSpotWriteback,
+  rejectHubSpotWriteback,
+  updateReviewDeskFeedbackNote,
   type ApproveHubSpotWritebackResult,
   type HubSpotWritebackPlanFieldUpdateView,
   type HubSpotWritebackReviewDetail,
