@@ -1,4 +1,10 @@
-import { getTotalSpendInWindow } from "./queries";
+import {
+  getUsageOverviewInWindow,
+  type UsageDailyTrendPoint as UsageDailyTrendPointReadModel,
+  type UsageOverviewReadModel,
+  type UsageScorecardSummary as UsageScorecardSummaryReadModel,
+  type UsageTrendProviderPoint as UsageTrendProviderPointReadModel,
+} from "./queries";
 
 export type UsageTimeWindowPreset = "24h" | "7d" | "30d" | "90d" | "all-time";
 
@@ -8,21 +14,33 @@ export type UsageTotalSpend = {
   costNullCount: number;
 };
 
+export type UsageOverview = UsageOverviewReadModel;
+export type UsageScorecardSummary = UsageScorecardSummaryReadModel;
+export type UsageTrendProviderPoint = UsageTrendProviderPointReadModel;
+export type UsageDailyTrendPoint = UsageDailyTrendPointReadModel;
+
 export async function getProductionUsageTotalSpend(input: {
   window: UsageTimeWindowPreset;
   now: Date;
 }): Promise<UsageTotalSpend> {
+  const overview = await getProductionUsageOverview(input);
+  return {
+    totalCostUsd: overview.scorecard.totalCostUsd,
+    callCount: overview.scorecard.callCount,
+    costNullCount: overview.scorecard.costNullCount,
+  };
+}
+
+export async function getProductionUsageOverview(input: {
+  window: UsageTimeWindowPreset;
+  now: Date;
+}): Promise<UsageOverview> {
   const from = resolveWindowStart(input.window, input.now);
-  const row = await getTotalSpendInWindow({
+  return getUsageOverviewInWindow({
     from,
     to: input.now,
     source: "PRODUCTION",
   });
-  return {
-    totalCostUsd: row.totalCostUsd,
-    callCount: row.callCount,
-    costNullCount: row.costNullCount,
-  };
 }
 
 function resolveWindowStart(

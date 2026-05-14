@@ -9,7 +9,12 @@ export {
 } from "./internal/record";
 
 export {
+  getProductionUsageOverview,
   getProductionUsageTotalSpend,
+  type UsageDailyTrendPoint,
+  type UsageOverview,
+  type UsageScorecardSummary,
   type UsageTimeWindowPreset,
+  type UsageTrendProviderPoint,
   type UsageTotalSpend,
 } from "./internal/operations";
