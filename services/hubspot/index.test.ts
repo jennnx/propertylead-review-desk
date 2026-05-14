@@ -295,7 +295,11 @@ describe("HubSpot service", () => {
         new Response(
           JSON.stringify({
             results: [message(1), message(2), message(3), message(4)],
-            paging: { next: { after: "cursor-2" } },
+            paging: {
+              next: {
+                link: "https://api.hubapi.com/conversations/v3/conversations/threads/thread-123/messages?limit=100&after=cursor-2",
+              },
+            },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
@@ -322,7 +326,9 @@ describe("HubSpot service", () => {
       "message-7",
     ]);
     expect(fetchHubSpot).toHaveBeenCalledTimes(2);
-    expect(fetchHubSpot.mock.calls[1][0]).toContain("after=cursor-2");
+    expect(fetchHubSpot.mock.calls[1][0]).toBe(
+      "https://api.hubapi.com/conversations/v3/conversations/threads/thread-123/messages?limit=100&after=cursor-2",
+    );
   });
 
   test("lists HubSpot Conversations threads for a contact across paged responses", async () => {
@@ -335,7 +341,11 @@ describe("HubSpot service", () => {
               { id: "thread-1", associatedContactId: "contact-7" },
               { id: "thread-2", associatedContactId: "contact-7" },
             ],
-            paging: { next: { after: "cursor-2" } },
+            paging: {
+              next: {
+                link: "https://api.hubapi.com/conversations/v3/conversations/threads?associatedContactId=contact-7&limit=100&after=cursor-2",
+              },
+            },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
