@@ -48,7 +48,7 @@ export function DashboardActivityChart({
               axisLine={false}
               tickMargin={6}
               minTickGap={24}
-              tickFormatter={formatTickDate}
+              tickFormatter={formatDateLabel}
             />
             <YAxis
               allowDecimals={false}
@@ -61,7 +61,7 @@ export function DashboardActivityChart({
               content={
                 <ChartTooltipContent
                   indicator="line"
-                  labelFormatter={(value) => formatTooltipDate(String(value))}
+                  labelFormatter={(value) => formatDateLabel(String(value))}
                 />
               }
             />
@@ -80,11 +80,7 @@ export function DashboardActivityChart({
   );
 }
 
-function formatTickDate(value: string): string {
-  return dayLabelFormatter.format(parseLocalDateKey(value));
-}
-
-function formatTooltipDate(value: string): string {
+function formatDateLabel(value: string): string {
   return dayLabelFormatter.format(parseLocalDateKey(value));
 }
 
