@@ -99,6 +99,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".sandcastle/worktrees/**",
+    // Git worktrees created by Claude Code for parallel work. Each worktree
+    // is a checked-out copy of the repo whose internal paths are prefixed
+    // with `.claude/worktrees/<name>/`, which makes ADR-0009 allowlist
+    // patterns like `services/**/internal/queries.ts` miss — surfacing
+    // hundreds of spurious lint failures for code that's clean inside the
+    // worktree itself. The worktree's own lint run (scoped to its own root)
+    // remains authoritative.
+    ".claude/worktrees/**",
     // Worker build output (see worker/tsconfig.json -> outDir).
     "dist/**",
   ]),
