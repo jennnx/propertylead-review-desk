@@ -9,14 +9,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getHubSpotWritebackReview } from "@/services/hubspot-writebacks";
 
 import { OperatorSuggestionStateBadge } from "../OperatorSuggestionStateBadge";
@@ -33,119 +25,166 @@ export default async function ReviewDeskDetailPage({
 
   if (!writeback) notFound();
 
+  const isPending = writeback.state === "PENDING";
+
   return (
-    <main className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+    <main className="min-h-svh bg-canvas text-foreground">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10 lg:px-10">
         <Link
           href="/review-desk"
-          className="inline-flex w-fit items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+          className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <HugeiconsIcon
             icon={ArrowLeft02Icon}
             strokeWidth={2}
-            data-icon="inline-start"
+            className="size-3"
           />
-          Review Desk
+          Back to Review Desk
         </Link>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{writeback.triggerSummary}</CardTitle>
-            <CardDescription>
-              {writeback.contactName}
-              {writeback.contactEmail ? ` - ${writeback.contactEmail}` : ""}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <p className="text-base leading-7">
-              {writeback.recommendationSummary}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <OperatorSuggestionStateBadge state={writeback.state} />
-              <span className="text-xs text-muted-foreground">
-                Created {formatDate(writeback.createdAt)}
+        <header className="flex flex-col gap-3 border-b border-border pb-6">
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-[24px] font-semibold leading-tight tracking-tight">
+              {writeback.triggerSummary}
+            </h1>
+            <OperatorSuggestionStateBadge state={writeback.state} />
+          </div>
+          <dl className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
+            <MetaItem label="Contact">
+              <span className="font-medium text-foreground">
+                {writeback.contactName}
               </span>
-              {writeback.appliedAt ? (
-                <span className="text-xs text-muted-foreground">
-                  Applied {formatDate(writeback.appliedAt)}
+              {writeback.contactEmail ? (
+                <span className="ml-1.5 text-muted-foreground">
+                  {writeback.contactEmail}
                 </span>
               ) : null}
-            </div>
-          </CardContent>
-          {writeback.state === "PENDING" ? (
-            <CardFooter>
+            </MetaItem>
+            <MetaItem label="Created">{formatDate(writeback.createdAt)}</MetaItem>
+            {writeback.appliedAt ? (
+              <MetaItem label="Applied">
+                {formatDate(writeback.appliedAt)}
+              </MetaItem>
+            ) : null}
+          </dl>
+        </header>
+
+        <section className="overflow-hidden rounded-xl border border-border bg-elevated">
+          <div className="flex flex-col gap-2 border-b border-border px-5 py-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Claude recommends
+            </p>
+            <p className="text-[15px] leading-relaxed text-foreground">
+              {writeback.recommendationSummary}
+            </p>
+          </div>
+          <div className="px-5 py-4">
+            {isPending ? (
               <ReviewDeskDecisionPanel
                 hubSpotWritebackId={writeback.id}
                 reviewDeskFeedbackNote={writeback.reviewDeskFeedbackNote}
               />
-            </CardFooter>
-          ) : (
-            <CardFooter>
+            ) : (
               <ReviewDeskFeedbackNoteEditor
                 hubSpotWritebackId={writeback.id}
                 reviewDeskFeedbackNote={writeback.reviewDeskFeedbackNote}
               />
-            </CardFooter>
-          )}
-        </Card>
+            )}
+          </div>
+        </section>
 
-        <Accordion type="multiple" defaultValue={["plan"]}>
-          <AccordionItem value="plan">
-            <AccordionTrigger>What the AI wants to change</AccordionTrigger>
-            <AccordionContent>
-              <div className="flex flex-col gap-4">
-                {writeback.plan.fieldUpdates.length > 0 ? (
-                  <div className="overflow-x-auto rounded-md border border-border">
-                    <table className="w-full min-w-[640px] border-collapse text-sm">
-                      <thead className="bg-muted/50 text-left text-xs font-medium uppercase text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2">Field</th>
-                          <th className="px-3 py-2">Value</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {writeback.plan.fieldUpdates.map((update) => (
-                          <tr
-                            key={update.name}
-                            className="border-t border-border"
-                          >
-                            <td className="px-3 py-3 font-medium">
-                              {update.label}
-                            </td>
-                            <td className="px-3 py-3 text-muted-foreground">
-                              {formatPlanValue(update.value)}
-                            </td>
+        <section className="flex flex-col gap-2">
+          <h2 className="px-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Details
+          </h2>
+          <Accordion
+            type="multiple"
+            defaultValue={["reasoning"]}
+            className="overflow-hidden rounded-xl border border-border bg-elevated"
+          >
+            <AccordionItem value="reasoning" className="border-b border-border last:border-0">
+              <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
+                Why the AI suggested this
+              </AccordionTrigger>
+              <AccordionContent className="px-5 pb-4 text-[13px] leading-relaxed text-foreground/85">
+                {writeback.claudeReasoning}
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="plan" className="border-b border-border last:border-0">
+              <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
+                What will change in HubSpot
+              </AccordionTrigger>
+              <AccordionContent className="px-5 pb-4">
+                <div className="flex flex-col gap-3">
+                  {writeback.plan.fieldUpdates.length > 0 ? (
+                    <div className="overflow-hidden rounded-md border border-border bg-canvas">
+                      <table className="w-full border-collapse text-[12px]">
+                        <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 font-medium">Field</th>
+                            <th className="px-3 py-2 font-medium">New value</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-                {writeback.plan.note ? (
-                  <div className="whitespace-pre-line rounded-md border border-border bg-muted/30 p-3 text-sm leading-6">
-                    {writeback.plan.note}
-                  </div>
-                ) : null}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="reasoning">
-            <AccordionTrigger>Why the AI suggested this</AccordionTrigger>
-            <AccordionContent>
-              <p className="text-sm leading-6">{writeback.claudeReasoning}</p>
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="context">
-            <AccordionTrigger>Context used by the AI</AccordionTrigger>
-            <AccordionContent>
-              <pre className="max-h-[32rem] overflow-auto rounded-md bg-muted p-3 text-xs leading-5 text-muted-foreground">
-                {JSON.stringify(writeback.enrichmentInputContext, null, 2)}
-              </pre>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+                        </thead>
+                        <tbody>
+                          {writeback.plan.fieldUpdates.map((update) => (
+                            <tr
+                              key={update.name}
+                              className="border-t border-border first:border-t-0"
+                            >
+                              <td className="px-3 py-2.5 font-medium tracking-tight">
+                                {update.label}
+                              </td>
+                              <td
+                                data-nums="tabular"
+                                className="px-3 py-2.5 text-foreground/80"
+                              >
+                                {formatPlanValue(update.value)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                  {writeback.plan.note ? (
+                    <div className="whitespace-pre-line rounded-md border border-border bg-canvas px-3 py-2.5 text-[12.5px] leading-relaxed text-foreground/85">
+                      {writeback.plan.note}
+                    </div>
+                  ) : null}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="context" className="border-b border-border last:border-0">
+              <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
+                Context used by the AI
+              </AccordionTrigger>
+              <AccordionContent className="px-5 pb-4">
+                <pre className="max-h-[32rem] overflow-auto rounded-md border border-border bg-canvas p-3 font-mono text-[11px] leading-5 text-muted-foreground">
+                  {JSON.stringify(writeback.enrichmentInputContext, null, 2)}
+                </pre>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </section>
       </div>
     </main>
+  );
+}
+
+function MetaItem({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <dt className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="text-xs">{children}</dd>
+    </div>
   );
 }
 

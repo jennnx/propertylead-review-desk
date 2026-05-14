@@ -1,5 +1,7 @@
 "use client";
 
+import { MagicWand01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -56,28 +58,36 @@ export function AutoApproveContainer({ enabled }: { enabled: boolean }) {
     <div
       data-state={checked ? "on" : "off"}
       className={cn(
-        "flex flex-col gap-2 rounded-md border bg-sidebar p-3 transition-shadow",
+        "flex flex-col gap-2 rounded-lg border bg-elevated p-3 transition-colors",
         checked
-          ? "border-sidebar-foreground/30 shadow-xs"
-          : "border-sidebar-border/50",
+          ? "border-sidebar-border shadow-[0_1px_0_0_oklch(0_0_0/0.03)]"
+          : "border-sidebar-border/70",
       )}
     >
       <div className="flex items-center gap-2">
         <span
           aria-hidden
           className={cn(
-            "size-1.5 rounded-full",
-            checked ? "bg-emerald-500" : "bg-sidebar-foreground/30",
-          )}
-        />
-        <p
-          className={cn(
-            "text-sm",
-            checked ? "font-semibold" : "font-medium text-sidebar-foreground/80",
+            "flex size-6 items-center justify-center rounded-md ring-1",
+            checked
+              ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30"
+              : "bg-muted text-muted-foreground ring-border",
           )}
         >
-          Auto-approve
-        </p>
+          <HugeiconsIcon
+            icon={MagicWand01Icon}
+            strokeWidth={2}
+            className="size-3.5"
+          />
+        </span>
+        <div className="flex flex-col leading-tight">
+          <p className="text-[12px] font-semibold tracking-tight">
+            Auto-approve
+          </p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            {checked ? "Active" : "Off"}
+          </p>
+        </div>
         <Switch
           aria-label="Auto-approve"
           className="ml-auto"
@@ -86,12 +96,14 @@ export function AutoApproveContainer({ enabled }: { enabled: boolean }) {
           onCheckedChange={requestChange}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-[11px] leading-snug text-muted-foreground">
         {checked
-          ? "AI applies suggestions automatically"
-          : "Suggestions wait for your review"}
+          ? "AI applies suggestions immediately."
+          : "Suggestions wait for your review."}
       </p>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="text-[11px] text-destructive">{error}</p>
+      ) : null}
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent>

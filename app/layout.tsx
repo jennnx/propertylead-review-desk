@@ -34,12 +34,12 @@ export default async function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full">
+      <body className="min-h-full bg-canvas text-foreground">
         <SidebarProvider
           style={{ "--sidebar-width": "15rem" } as React.CSSProperties}
         >
           <AppSidebar autoModeEnabled={autoMode.enabled} />
-          <SidebarInset>{children}</SidebarInset>
+          <SidebarInset className="bg-canvas">{children}</SidebarInset>
         </SidebarProvider>
       </body>
     </html>
