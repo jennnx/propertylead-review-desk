@@ -51,6 +51,21 @@ enum SopDocumentProcessingStatus {
   FAILED     @map("failed")
 }
 
+enum LlmCallProvider {
+  ANTHROPIC @map("anthropic")
+  VOYAGE    @map("voyage")
+}
+
+enum LlmCallSource {
+  PRODUCTION @map("production")
+  EVAL       @map("eval")
+}
+
+enum LlmCallStatus {
+  OK    @map("ok")
+  ERROR @map("error")
+}
+
 model HubSpotWebhookEvent {
   id               String                              @id @default(cuid())
   dedupeKey        String                              @unique
@@ -81,6 +96,7 @@ model HubSpotWorkflowRun {
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
   hubSpotWriteback       HubSpotWriteback?
+  llmCalls               LlmCall[]
 
   @@index([status, createdAt])
   @@map("hubspot_workflow_runs")
@@ -118,6 +134,7 @@ model SopDocument {
   processingStatus SopDocumentProcessingStatus @default(PROCESSING)
   failureMessage   String?
   chunks           SopChunk[]
+  llmCalls         LlmCall[]
 
   @@index([processingStatus, uploadedAt])
   @@map("sop_documents")
@@ -133,4 +150,42 @@ model SopChunk {
 
   @@unique([sopDocumentId, ordinal])
   @@map("sop_chunks")
+}
+
+// One row per provider service-method invocation (e.g. one `messages.create`
+// call). Telemetry is numeric and metadata only — never prompts, responses,
+// or contact content. Cost is computed at write time and frozen here so
+// historical rows survive pricing-table updates.
+model LlmCall {
+  id                    String              @id @default(cuid())
+  provider              LlmCallProvider
+  /// Grouping key — e.g. "claude-sonnet-4-6". Matches the pricing-reference
+  /// key; always set even when the wrapper had to fall back from the
+  /// response snapshot.
+  modelAlias            String
+  /// What the provider actually echoed back as the model. Anthropic
+  /// sometimes returns a dated snapshot ("claude-sonnet-4-6-20251022") and
+  /// sometimes the alias itself ("claude-sonnet-4-6"); both shapes are
+  /// stored verbatim. Equal to modelAlias when the provider echoed the
+  /// alias rather than a dated snapshot — not a data layer bug.
+  modelSnapshot         String
+  source                LlmCallSource       @default(PRODUCTION)
+  inputTokens           Int?
+  outputTokens          Int?
+  cacheCreationTokens   Int?
+  cacheReadTokens       Int?
+  totalTokens           Int?
+  costUsd               Decimal?            @db.Decimal(12, 8)
+  latencyMs             Int
+  status                LlmCallStatus       @default(OK)
+  errorMessage          String?
+  hubSpotWorkflowRunId  String?
+  hubSpotWorkflowRun    HubSpotWorkflowRun? @relation(fields: [hubSpotWorkflowRunId], references: [id], onDelete: SetNull)
+  sopDocumentId         String?
+  sopDocument           SopDocument?        @relation(fields: [sopDocumentId], references: [id], onDelete: SetNull)
+  createdAt             DateTime            @default(now())
+
+  @@index([source, createdAt])
+  @@index([provider, modelAlias, createdAt])
+  @@map("llm_calls")
 }

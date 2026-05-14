@@ -11,6 +11,7 @@ export const REQUIRED_TEST_ENV = {
   SOP_STORAGE_DIR: "/tmp/propertylead-review-desk/sops",
   HUBSPOT_CLIENT_SECRET: "test-hubspot-client-secret",
   HUBSPOT_ACCESS_TOKEN: "test-hubspot-access-token",
+  LLM_TELEMETRY_SOURCE: "production",
 } satisfies Env;
 
 type TestEnvKey = keyof Env;
