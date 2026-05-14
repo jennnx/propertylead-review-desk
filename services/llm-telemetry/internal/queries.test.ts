@@ -295,7 +295,7 @@ describe("LLM telemetry usage breakdown queries", () => {
         totalCacheCreationTokens: "120",
         totalCacheReadTokens: "480",
         totalTokens: "4500",
-        totalCostUsd: "0.04210000",
+        totalCostUsd: { toString: () => "0.04210000" },
         averageLatencyMs: "812.5",
         p50LatencyMs: "780",
         p95LatencyMs: "1200.75",

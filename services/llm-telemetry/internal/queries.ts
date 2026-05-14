@@ -238,25 +238,9 @@ function parseLocalDateKey(value: string): Date {
   return new Date(year, month - 1, day);
 }
 
-const dbNumberSchema = z
-  .union([z.string(), z.number(), z.bigint(), z.null()])
-  .transform((value) => {
-    if (value === null) return 0;
-    if (typeof value === "bigint") return Number(value);
-    if (typeof value === "number") return value;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  });
+const dbNumberSchema = z.coerce.number().finite().catch(0);
 
-const nullableDbNumberSchema = z
-  .union([z.string(), z.number(), z.bigint(), z.null()])
-  .transform((value) => {
-    if (value === null) return null;
-    if (typeof value === "bigint") return Number(value);
-    if (typeof value === "number") return value;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  });
+const nullableDbNumberSchema = z.coerce.number().finite().nullable().catch(null);
 
 const llmCallProviderSchema = z.enum(["anthropic", "voyage"]);
 
