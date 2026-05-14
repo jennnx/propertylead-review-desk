@@ -1,15 +1,18 @@
 import { Analytics01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { Badge } from "@/components/ui/badge";
 import {
-  getProductionUsageTotalSpend,
+  getProductionUsageOverview,
   type UsageProviderSpend,
+  type UsageScorecardSummary,
   type UsageTimeWindowPreset,
 } from "@/services/llm-telemetry";
-import { Badge } from "@/components/ui/badge";
 
 import { TimeWindowSelector } from "./TimeWindowSelector";
+import { UsageTrendChart } from "./UsageTrendChart";
 
 const TIME_WINDOW_PRESETS: ReadonlyArray<{
   value: UsageTimeWindowPreset;
@@ -38,18 +41,14 @@ export default async function UsagePage({
   const params = await searchParams;
   const window = parseWindow(params.window);
 
-  const totalSpend = await getProductionUsageTotalSpend({
+  const usage = await getProductionUsageOverview({
     window,
     now: new Date(),
   });
 
-  const hasData = totalSpend.callCount > 0;
-  const allUncosted =
-    hasData && totalSpend.costNullCount === totalSpend.callCount;
-  const hasKnownCost = hasData && !allUncosted;
   const windowLabel =
     TIME_WINDOW_PRESETS.find((preset) => preset.value === window)?.label ??
-    DEFAULT_WINDOW;
+    "Last 30 days";
 
   return (
     <main className="min-h-svh bg-canvas text-foreground">
@@ -70,44 +69,104 @@ export default async function UsagePage({
           />
         </header>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-elevated/40 p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Total spend
-            </p>
-            {hasKnownCost ? (
-              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
-                {formatUsd(totalSpend.totalCostUsd)}
-              </p>
-            ) : (
-              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-muted-foreground">
-                —
-              </p>
-            )}
-            <p className="mt-2 text-xs text-muted-foreground">
-              {!hasData
-                ? `No activity in ${windowLabel.toLowerCase()}`
-                : allUncosted
-                  ? `${totalSpend.callCount} call${totalSpend.callCount === 1 ? "" : "s"} without pricing data · ${windowLabel.toLowerCase()}`
-                  : `${totalSpend.callCount} production call${totalSpend.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`}
-            </p>
-            <ProviderSpendBreakdown
-              providers={totalSpend.providerBreakdown}
-            />
-            {totalSpend.costNullCount > 0 && !allUncosted ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {totalSpend.costNullCount} call
-                {totalSpend.costNullCount === 1 ? "" : "s"} without pricing data
-              </p>
-            ) : null}
-          </div>
-        </section>
+        <UsageScorecard
+          scorecard={usage.scorecard}
+          windowLabel={windowLabel}
+        />
 
-        {!hasData ? (
-          <NoActivityHint window={windowLabel} />
-        ) : null}
+        <UsageTrendChart
+          data={usage.dailyTrend}
+          windowLabel={windowLabel}
+        />
       </div>
     </main>
+  );
+}
+
+function UsageScorecard({
+  scorecard,
+  windowLabel,
+}: {
+  scorecard: UsageScorecardSummary;
+  windowLabel: string;
+}) {
+  const hasData = scorecard.callCount > 0;
+  const hasPricedCalls = scorecard.pricedCallCount > 0;
+  const quietHint = hasData
+    ? `${scorecard.callCount} production call${scorecard.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`
+    : "Quiet so far";
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
+        <ScorecardTile
+          label="LLM calls"
+          value={scorecard.callCount.toLocaleString("en-US")}
+          hint={quietHint}
+        />
+        <ScorecardTile
+          label="Total spend"
+          value={formatUsd(scorecard.totalCostUsd)}
+          hint={
+            hasPricedCalls ? `${scorecard.pricedCallCount} priced` : quietHint
+          }
+        >
+          <ProviderSpendBreakdown providers={scorecard.providerBreakdown} />
+        </ScorecardTile>
+        <ScorecardTile
+          label="Avg cost"
+          value={
+            hasPricedCalls
+              ? formatUsd(scorecard.averageCostUsd ?? 0)
+              : hasData
+                ? "—"
+                : "$0.00"
+          }
+          hint={hasPricedCalls ? "Per priced call" : quietHint}
+        />
+        <ScorecardTile
+          label="Avg latency"
+          value={
+            scorecard.averageLatencyMs === null
+              ? "0 ms"
+              : `${Math.round(scorecard.averageLatencyMs).toLocaleString("en-US")} ms`
+          }
+          hint={hasData ? "Provider transport" : quietHint}
+        />
+        <ScorecardTile
+          label="Success rate"
+          value={
+            scorecard.successRate === null
+              ? "0%"
+              : `${formatPercentage(scorecard.successRate)}%`
+          }
+          hint={hasData ? "Provider transport" : quietHint}
+        />
+      </div>
+      {scorecard.costNullCount > 0 ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <HugeiconsIcon
+            icon={Analytics01Icon}
+            strokeWidth={1.75}
+            className="size-3.5"
+          />
+          {scorecard.costNullCount.toLocaleString("en-US")} call
+          {scorecard.costNullCount === 1 ? "" : "s"} without pricing data
+        </p>
+      ) : null}
+      {!hasData ? (
+        <p className="text-xs text-muted-foreground">
+          Trigger a HubSpot Workflow Run from the{" "}
+          <Link
+            href="/review-desk"
+            className="underline-offset-4 hover:underline"
+          >
+            Review Desk
+          </Link>{" "}
+          to populate this page.
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -117,7 +176,7 @@ function ProviderSpendBreakdown({
   providers: UsageProviderSpend[];
 }) {
   return (
-    <div className="mt-3 flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5">
       {providers.map((provider) => (
         <Badge
           key={provider.provider}
@@ -134,25 +193,32 @@ function ProviderSpendBreakdown({
   );
 }
 
-function NoActivityHint({ window }: { window: string }) {
+function ScorecardTile({
+  label,
+  value,
+  hint,
+  children,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  children?: ReactNode;
+}) {
   return (
-    <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-elevated/40 px-6 py-10 text-center">
-      <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
-        <HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.75} />
-      </span>
-      <p className="text-sm font-medium tracking-tight">
-        No AI activity in {window.toLowerCase()}
-      </p>
-      <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-        Trigger a HubSpot Workflow Run from the{" "}
-        <Link
-          href="/review-desk"
-          className="underline-offset-4 hover:underline"
+    <div className="flex min-h-32 flex-col justify-between gap-4 bg-elevated px-5 py-4">
+      <div className="flex flex-col gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </p>
+        <p
+          data-nums="tabular"
+          className="text-2xl font-semibold leading-none tracking-tight text-foreground"
         >
-          Review Desk
-        </Link>{" "}
-        to populate this page.
-      </p>
+          {value}
+        </p>
+        {children}
+      </div>
+      <p className="text-[12px] text-muted-foreground">{hint}</p>
     </div>
   );
 }
@@ -165,7 +231,7 @@ function formatUsd(value: number): string {
   // For very small per-call costs ($0.000132 etc.), surface 6 decimal places
   // to match the schema precision rather than clamping to 4 and losing the
   // tail. Standard 2-digit display for everything from $1 up.
-  const fractionDigits = value < 0.01 ? 6 : value < 1 ? 4 : 2;
+  const fractionDigits = value === 0 ? 2 : value < 0.01 ? 6 : value < 1 ? 4 : 2;
   const formatter = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -173,4 +239,8 @@ function formatUsd(value: number): string {
     maximumFractionDigits: fractionDigits,
   });
   return formatter.format(value);
+}
+
+function formatPercentage(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }

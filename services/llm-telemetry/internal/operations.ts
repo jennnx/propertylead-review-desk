@@ -1,4 +1,11 @@
-import { getProviderSpendInWindow, getTotalSpendInWindow } from "./queries";
+import {
+  getUsageOverviewInWindow,
+  type UsageDailyTrendPoint as UsageDailyTrendPointReadModel,
+  type UsageOverviewReadModel,
+  type UsageProviderSpend as UsageProviderSpendReadModel,
+  type UsageScorecardSummary as UsageScorecardSummaryReadModel,
+  type UsageTrendProviderPoint as UsageTrendProviderPointReadModel,
+} from "./queries";
 
 export type UsageTimeWindowPreset = "24h" | "7d" | "30d" | "90d" | "all-time";
 
@@ -9,55 +16,35 @@ export type UsageTotalSpend = {
   providerBreakdown: UsageProviderSpend[];
 };
 
-export type UsageProviderSpend = {
-  provider: "anthropic" | "voyage";
-  totalCostUsd: number;
-  callCount: number;
-};
+export type UsageProviderSpend = UsageProviderSpendReadModel;
+export type UsageOverview = UsageOverviewReadModel;
+export type UsageScorecardSummary = UsageScorecardSummaryReadModel;
+export type UsageTrendProviderPoint = UsageTrendProviderPointReadModel;
+export type UsageDailyTrendPoint = UsageDailyTrendPointReadModel;
 
 export async function getProductionUsageTotalSpend(input: {
   window: UsageTimeWindowPreset;
   now: Date;
 }): Promise<UsageTotalSpend> {
-  const from = resolveWindowStart(input.window, input.now);
-  const [row, providerRows] = await Promise.all([
-    getTotalSpendInWindow({
-      from,
-      to: input.now,
-      source: "PRODUCTION",
-    }),
-    getProviderSpendInWindow({
-      from,
-      to: input.now,
-      source: "PRODUCTION",
-    }),
-  ]);
-
+  const overview = await getProductionUsageOverview(input);
   return {
-    totalCostUsd: row.totalCostUsd,
-    callCount: row.callCount,
-    costNullCount: row.costNullCount,
-    providerBreakdown: normalizeProviderBreakdown(providerRows),
+    totalCostUsd: overview.scorecard.totalCostUsd,
+    callCount: overview.scorecard.callCount,
+    costNullCount: overview.scorecard.costNullCount,
+    providerBreakdown: overview.scorecard.providerBreakdown,
   };
 }
 
-function normalizeProviderBreakdown(
-  rows: Awaited<ReturnType<typeof getProviderSpendInWindow>>,
-): UsageProviderSpend[] {
-  const byProvider = new Map(rows.map((row) => [row.provider, row]));
-
-  return [
-    {
-      provider: "anthropic",
-      totalCostUsd: byProvider.get("ANTHROPIC")?.totalCostUsd ?? 0,
-      callCount: byProvider.get("ANTHROPIC")?.callCount ?? 0,
-    },
-    {
-      provider: "voyage",
-      totalCostUsd: byProvider.get("VOYAGE")?.totalCostUsd ?? 0,
-      callCount: byProvider.get("VOYAGE")?.callCount ?? 0,
-    },
-  ];
+export async function getProductionUsageOverview(input: {
+  window: UsageTimeWindowPreset;
+  now: Date;
+}): Promise<UsageOverview> {
+  const from = resolveWindowStart(input.window, input.now);
+  return getUsageOverviewInWindow({
+    from,
+    to: input.now,
+    source: "PRODUCTION",
+  });
 }
 
 function resolveWindowStart(
