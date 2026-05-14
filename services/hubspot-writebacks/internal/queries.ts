@@ -6,6 +6,8 @@ import {
 } from "@/services/hubspot";
 import { getPrismaClient } from "@/services/database";
 
+import { getOperatorRecommendationSummary } from "./operator-copy";
+
 const fieldUpdateSchema = z.object({
   name: z.string().min(1),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
@@ -198,6 +200,67 @@ export async function findHubSpotWritebackReviewDetail(
   return toReviewDetail(reviewRowSchema.parse(row));
 }
 
+export type OperatorDashboardCountsRaw = {
+  handledToday: number;
+  autoApprovedToday: number;
+  awaitingReviewToday: number;
+  decided30dApproved: number;
+  decided30dRejected: number;
+};
+
+export async function getOperatorDashboardCountsRaw(input: {
+  todayStart: Date;
+  thirtyDaysAgo: Date;
+}): Promise<OperatorDashboardCountsRaw> {
+  const prisma = getPrismaClient();
+  const [
+    handledToday,
+    autoApprovedToday,
+    awaitingReviewToday,
+    decided30dApproved,
+    decided30dRejected,
+  ] = await Promise.all([
+    prisma.hubSpotWorkflowRun.count({
+      where: {
+        status: { in: ["SUCCEEDED", "FAILED"] },
+        completedAt: { gte: input.todayStart },
+      },
+    }),
+    prisma.hubSpotWriteback.count({
+      where: {
+        state: "AUTO_APPLIED",
+        appliedAt: { gte: input.todayStart },
+      },
+    }),
+    prisma.hubSpotWriteback.count({
+      where: {
+        state: "PENDING",
+        createdAt: { gte: input.todayStart },
+      },
+    }),
+    prisma.hubSpotWriteback.count({
+      where: {
+        state: { in: ["APPLIED", "AUTO_APPLIED"] },
+        createdAt: { gte: input.thirtyDaysAgo },
+      },
+    }),
+    prisma.hubSpotWriteback.count({
+      where: {
+        state: "REJECTED",
+        createdAt: { gte: input.thirtyDaysAgo },
+      },
+    }),
+  ]);
+
+  return {
+    handledToday,
+    autoApprovedToday,
+    awaitingReviewToday,
+    decided30dApproved,
+    decided30dRejected,
+  };
+}
+
 const reviewRowSelect = {
   id: true,
   state: true,
@@ -249,7 +312,10 @@ function toReviewDetail(
     }),
     contactName,
     contactEmail,
-    recommendationSummary: formatRecommendationSummary(fieldUpdates, row.plan.note),
+    recommendationSummary: getOperatorRecommendationSummary({
+      fieldUpdates,
+      note: row.plan.note,
+    }),
     plan: {
       fieldUpdates,
       note: row.plan.note,
@@ -281,24 +347,6 @@ function formatTriggerSummary({
     return `Inbound message from ${contactName}`;
   }
   return `New contact created: ${contactName}`;
-}
-
-function formatRecommendationSummary(
-  fieldUpdates: HubSpotWritebackPlanFieldUpdateView[],
-  note: string | null,
-): string {
-  const updateCount = fieldUpdates.length;
-  if (updateCount > 0 && note) {
-    return `Claude recommends ${formatUpdateCount(updateCount)} and adding a HubSpot note.`;
-  }
-  if (updateCount > 0) {
-    return `Claude recommends ${formatUpdateCount(updateCount)}.`;
-  }
-  return "Claude recommends adding a HubSpot note.";
-}
-
-function formatUpdateCount(count: number): string {
-  return count === 1 ? "updating 1 HubSpot field" : `updating ${count} HubSpot fields`;
 }
 
 function formatClaudeReasoning(rawOutputs: unknown): string {

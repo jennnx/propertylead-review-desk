@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
+
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { getHubSpotWritebackAutoMode } from "@/services/hubspot-writebacks";
+
+import { AppSidebar } from "./AppSidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,39 +22,25 @@ export const metadata: Metadata = {
   description: "Review desk for PropertyLead lead triage.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const autoMode = await getHubSpotWritebackAutoMode();
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">
-        <header className="border-b border-border bg-background">
-          <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <Link href="/" className="text-sm font-semibold">
-              PropertyLead
-            </Link>
-            <nav className="flex items-center gap-1 text-sm">
-              <Link
-                href="/review-desk"
-                className="rounded-md px-2 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                Review Desk
-              </Link>
-              <Link
-                href="/sops"
-                className="rounded-md px-2 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                SOP Library
-              </Link>
-            </nav>
-          </div>
-        </header>
-        {children}
+      <body className="min-h-full">
+        <SidebarProvider
+          style={{ "--sidebar-width": "15rem" } as React.CSSProperties}
+        >
+          <AppSidebar autoModeEnabled={autoMode.enabled} />
+          <SidebarInset>{children}</SidebarInset>
+        </SidebarProvider>
       </body>
     </html>
   );

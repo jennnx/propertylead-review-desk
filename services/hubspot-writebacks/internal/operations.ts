@@ -13,6 +13,7 @@ import {
   findHubSpotWritebackForApproval,
   findHubSpotWritebackReviewDetail,
   getHubSpotWritebackAutoModeEnabled,
+  getOperatorDashboardCountsRaw,
   listDecidedHubSpotWritebackReviewItems,
   listPendingHubSpotWritebackReviewItems,
 } from "./queries";
@@ -157,5 +158,30 @@ export async function setHubSpotWritebackAutoMode({
 }: HubSpotWritebackAutoMode): Promise<HubSpotWritebackAutoMode> {
   return {
     enabled: await setHubSpotWritebackAutoModeEnabled(enabled),
+  };
+}
+
+export type OperatorDashboardCounts = {
+  handledToday: number;
+  autoApprovedToday: number;
+  awaitingReviewToday: number;
+  approvalRate30Days: number | null;
+};
+
+export async function getOperatorDashboardCounts(): Promise<OperatorDashboardCounts> {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const thirtyDaysAgo = new Date(todayStart);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const raw = await getOperatorDashboardCountsRaw({ todayStart, thirtyDaysAgo });
+  const decidedTotal = raw.decided30dApproved + raw.decided30dRejected;
+
+  return {
+    handledToday: raw.handledToday,
+    autoApprovedToday: raw.autoApprovedToday,
+    awaitingReviewToday: raw.awaitingReviewToday,
+    approvalRate30Days:
+      decidedTotal === 0 ? null : raw.decided30dApproved / decidedTotal,
   };
 }

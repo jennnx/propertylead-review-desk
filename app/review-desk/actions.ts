@@ -119,7 +119,7 @@ export async function setHubSpotWritebackAutoModeAction(
     const setting = await setHubSpotWritebackAutoMode({
       enabled: parsed.data,
     });
-    revalidatePath("/review-desk");
+    revalidatePath("/", "layout");
     return { ok: true, enabled: setting.enabled };
   } catch (error) {
     console.error("Failed to update HubSpot Writeback Auto-Mode.", {
