@@ -40,7 +40,7 @@ export function ReviewDeskFeedbackNoteEditor({
         htmlFor="decidedReviewDeskFeedbackNote"
         className="text-xs font-medium text-muted-foreground"
       >
-        Review Desk feedback note
+        Give the AI feedback
       </label>
       <Textarea
         id="decidedReviewDeskFeedbackNote"

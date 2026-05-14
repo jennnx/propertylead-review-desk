@@ -77,14 +77,14 @@ export function ReviewDeskDecisionPanel({
       </div>
       <details className="group rounded-md border border-dashed border-border px-3 py-2">
         <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
-          Add optional feedback note
+          Give the AI feedback (optional)
         </summary>
         <div className="mt-3 flex flex-col gap-2">
           <label
             htmlFor="reviewDeskFeedbackNote"
             className="text-xs font-medium text-muted-foreground"
           >
-            Review Desk feedback note
+            Give the AI feedback
           </label>
           <Textarea
             id="reviewDeskFeedbackNote"

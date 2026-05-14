@@ -9,7 +9,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -18,11 +17,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  getHubSpotWritebackReview,
-  type HubSpotWritebackReviewDetail,
-} from "@/services/hubspot-writebacks";
+import { getHubSpotWritebackReview } from "@/services/hubspot-writebacks";
 
+import { OperatorSuggestionStateBadge } from "../OperatorSuggestionStateBadge";
 import { ReviewDeskDecisionPanel } from "../ReviewDeskDecisionPanel";
 import { ReviewDeskFeedbackNoteEditor } from "../ReviewDeskFeedbackNoteEditor";
 
@@ -64,7 +61,7 @@ export default async function ReviewDeskDetailPage({
               {writeback.recommendationSummary}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <DecisionBadge writeback={writeback} />
+              <OperatorSuggestionStateBadge state={writeback.state} />
               <span className="text-xs text-muted-foreground">
                 Created {formatDate(writeback.createdAt)}
               </span>
@@ -94,7 +91,7 @@ export default async function ReviewDeskDetailPage({
 
         <Accordion type="multiple" defaultValue={["plan"]}>
           <AccordionItem value="plan">
-            <AccordionTrigger>Proposed HubSpot Writeback Plan</AccordionTrigger>
+            <AccordionTrigger>What the AI wants to change</AccordionTrigger>
             <AccordionContent>
               <div className="flex flex-col gap-4">
                 {writeback.plan.fieldUpdates.length > 0 ? (
@@ -133,13 +130,13 @@ export default async function ReviewDeskDetailPage({
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="reasoning">
-            <AccordionTrigger>Claude Reasoning</AccordionTrigger>
+            <AccordionTrigger>Why the AI suggested this</AccordionTrigger>
             <AccordionContent>
               <p className="text-sm leading-6">{writeback.claudeReasoning}</p>
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="context">
-            <AccordionTrigger>Enrichment Input Context</AccordionTrigger>
+            <AccordionTrigger>Context used by the AI</AccordionTrigger>
             <AccordionContent>
               <pre className="max-h-[32rem] overflow-auto rounded-md bg-muted p-3 text-xs leading-5 text-muted-foreground">
                 {JSON.stringify(writeback.enrichmentInputContext, null, 2)}
@@ -150,23 +147,6 @@ export default async function ReviewDeskDetailPage({
       </div>
     </main>
   );
-}
-
-function DecisionBadge({
-  writeback,
-}: {
-  writeback: HubSpotWritebackReviewDetail;
-}) {
-  if (writeback.state === "APPLIED") {
-    return <Badge>applied</Badge>;
-  }
-  if (writeback.state === "REJECTED") {
-    return <Badge variant="destructive">rejected</Badge>;
-  }
-  if (writeback.state === "AUTO_APPLIED") {
-    return <Badge variant="secondary">auto-applied</Badge>;
-  }
-  return <Badge variant="outline">pending</Badge>;
 }
 
 function formatDate(date: Date): string {

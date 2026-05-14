@@ -18,6 +18,7 @@ import {
   type HubSpotWritebackReviewItem,
 } from "@/services/hubspot-writebacks";
 
+import { OperatorSuggestionStateBadge } from "./OperatorSuggestionStateBadge";
 import { ReviewDeskAutoModeSwitch } from "./ReviewDeskAutoModeSwitch";
 
 export default async function ReviewDeskPage() {
@@ -122,7 +123,7 @@ function ReviewDeskWritebackCard({
           {writeback.contactEmail ? ` - ${writeback.contactEmail}` : ""}
         </CardDescription>
         <CardAction>
-          <DecisionBadge state={writeback.state} />
+          <OperatorSuggestionStateBadge state={writeback.state} />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -145,11 +146,3 @@ function ReviewDeskWritebackCard({
   );
 }
 
-function DecisionBadge({ state }: { state: HubSpotWritebackReviewItem["state"] }) {
-  if (state === "APPLIED") return <Badge>applied</Badge>;
-  if (state === "REJECTED") return <Badge variant="destructive">rejected</Badge>;
-  if (state === "AUTO_APPLIED") {
-    return <Badge variant="secondary">auto-applied</Badge>;
-  }
-  return <Badge variant="outline">pending</Badge>;
-}
