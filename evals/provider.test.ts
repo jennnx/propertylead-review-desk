@@ -10,7 +10,7 @@ import {
 } from "@/services/hubspot-workflows/internal/request-writeback-plan";
 
 import type { EvalCase } from "./cases";
-import { evaluateCase } from "./provider";
+import PropertyLeadEvalProvider, { evaluateCase } from "./provider";
 
 vi.mock("@/services/hubspot-workflows/internal/request-writeback-plan", () => ({
   requestInboundMessageWritebackPlan: vi.fn(),
@@ -161,4 +161,61 @@ describe("evaluateCase for inbound.message cases", () => {
       truncationStatus: "TRUNCATED",
     });
   });
+
+  it("passes an explicit Claude model override to inbound-message writeback plan requests", async () => {
+    const evalCase = buildMinimalInboundMessageEvalCase();
+
+    await evaluateCase(evalCase, {
+      claudeModel: "claude-haiku-4-5-20251001",
+    });
+
+    expect(mockedRequest).toHaveBeenCalledWith({
+      enrichmentInputContext: expect.objectContaining({
+        source: "hubspot_inbound_message",
+        triggeringMessageId: "msg-1",
+      }),
+      claudeModel: "claude-haiku-4-5-20251001",
+    });
+  });
+
+  it("maps Promptfoo provider config names to Claude model aliases", async () => {
+    const provider = new PropertyLeadEvalProvider({
+      label: "claude-opus",
+      config: { claudeModel: "opus" },
+    });
+
+    const result = await provider.callApi("(unused)", {
+      vars: { case: buildMinimalInboundMessageEvalCase() },
+    } as unknown as Parameters<PropertyLeadEvalProvider["callApi"]>[1]);
+
+    expect(result.error).toBeUndefined();
+    expect(provider.id()).toBe("claude-opus");
+    expect(mockedRequest).toHaveBeenCalledWith({
+      enrichmentInputContext: expect.objectContaining({
+        source: "hubspot_inbound_message",
+        triggeringMessageId: "msg-1",
+      }),
+      claudeModel: "claude-opus-4-7",
+    });
+  });
 });
+
+function buildMinimalInboundMessageEvalCase(): EvalCase {
+  return {
+    name: "model-override-test",
+    rubric: "PASS",
+    trigger: {
+      kind: "inbound.message",
+      context: {
+        source: "hubspot_inbound_message",
+        hubSpotPortalId: null,
+        occurredAt: null,
+        triggeringMessageId: "msg-1",
+        contact: { id: "contact-1", properties: {} },
+        currentConversationSession: {
+          messages: [{ id: "msg-1", text: "Can I tour this weekend?" }],
+        },
+      },
+    },
+  };
+}

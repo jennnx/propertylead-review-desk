@@ -52,6 +52,10 @@ vi.mock("@/services/claude", () => ({
     HAIKU: "claude-haiku-4-5-20251001",
   },
   DEFAULT_CLAUDE_MODEL: "claude-sonnet-4-6",
+  runWithClaudeTelemetryContext: vi.fn(
+    async (_context: unknown, operation: () => Promise<unknown>) =>
+      operation(),
+  ),
 }));
 
 vi.mock("@/services/hubspot", async (importOriginal) => {

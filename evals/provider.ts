@@ -9,6 +9,7 @@ import type {
   HubSpotWorkflowRunConversationMessage,
   HubSpotWorkflowRunInboundMessageEnrichmentInputContext,
 } from "@/services/hubspot-workflows/internal/mutations";
+import type { ClaudeModel } from "@/services/claude";
 import {
   requestInboundMessageWritebackPlan,
   type HubSpotWritebackPlanRequestResult,
@@ -23,14 +24,24 @@ import { formatPlanForJudge } from "./format-plan";
 
 const DEFAULT_INBOUND_THREAD_ID = "eval-thread";
 const DEFAULT_INBOUND_MESSAGE_LIMIT = 30;
+const EVAL_CLAUDE_MODELS = {
+  OPUS: "claude-opus-4-7",
+  SONNET: "claude-sonnet-4-6",
+  HAIKU: "claude-haiku-4-5-20251001",
+} as const satisfies Record<string, ClaudeModel>;
 
 export type EvaluateCaseResult = {
   output: string;
   vars: { triggerSummary: string };
 };
 
+export type EvaluateCaseOptions = {
+  claudeModel?: ClaudeModel;
+};
+
 export async function evaluateCase(
   evalCase: EvalCase,
+  options: EvaluateCaseOptions = {},
 ): Promise<EvaluateCaseResult> {
   switch (evalCase.trigger.kind) {
     case "inbound.message": {
@@ -39,6 +50,7 @@ export async function evaluateCase(
       const result: HubSpotWritebackPlanRequestResult =
         await requestInboundMessageWritebackPlan({
           enrichmentInputContext: context,
+          claudeModel: options.claudeModel,
         });
       return {
         output: formatPlanForJudge(result),
@@ -159,9 +171,14 @@ function escapeHtml(text: string): string {
 
 export default class PropertyLeadEvalProvider implements ApiProvider {
   private readonly providerId: string;
+  private readonly claudeModel: ClaudeModel | undefined;
 
   constructor(options?: ProviderOptions) {
-    this.providerId = options?.id ?? "propertylead-eval-provider";
+    this.providerId =
+      typeof options?.label === "string"
+        ? options.label
+        : (options?.id ?? "propertylead-eval-provider");
+    this.claudeModel = readClaudeModelConfig(options?.config);
   }
 
   id(): string {
@@ -180,7 +197,9 @@ export default class PropertyLeadEvalProvider implements ApiProvider {
       };
     }
     try {
-      const { output, vars } = await evaluateCase(rawCase as EvalCase);
+      const { output, vars } = await evaluateCase(rawCase as EvalCase, {
+        claudeModel: this.claudeModel,
+      });
       return {
         output,
         metadata: { triggerSummary: vars.triggerSummary },
@@ -194,4 +213,32 @@ export default class PropertyLeadEvalProvider implements ApiProvider {
       };
     }
   }
+}
+
+function readClaudeModelConfig(config: unknown): ClaudeModel | undefined {
+  if (!config || typeof config !== "object") return undefined;
+  const configured = (
+    config as { claudeModel?: unknown; model?: unknown }
+  ).claudeModel ?? (config as { model?: unknown }).model;
+  if (typeof configured !== "string") return undefined;
+  return resolveClaudeModel(configured);
+}
+
+function resolveClaudeModel(configured: string): ClaudeModel {
+  const normalized = configured.trim().toLowerCase();
+  const byName: Record<string, ClaudeModel> = {
+    sonnet: EVAL_CLAUDE_MODELS.SONNET,
+    opus: EVAL_CLAUDE_MODELS.OPUS,
+    haiku: EVAL_CLAUDE_MODELS.HAIKU,
+    [EVAL_CLAUDE_MODELS.SONNET]: EVAL_CLAUDE_MODELS.SONNET,
+    [EVAL_CLAUDE_MODELS.OPUS]: EVAL_CLAUDE_MODELS.OPUS,
+    [EVAL_CLAUDE_MODELS.HAIKU]: EVAL_CLAUDE_MODELS.HAIKU,
+  };
+  const model = byName[normalized];
+  if (!model) {
+    throw new Error(
+      `Unsupported Claude eval model "${configured}". Use one of: sonnet, opus, haiku.`,
+    );
+  }
+  return model;
 }

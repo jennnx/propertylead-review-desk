@@ -39,9 +39,11 @@ const dayLabelFormatter = new Intl.DateTimeFormat("en-US", {
 export function UsageTrendChart({
   data,
   windowLabel,
+  sourceLabel,
 }: {
   data: UsageDailyTrendPoint[];
   windowLabel: string;
+  sourceLabel: string;
 }) {
   const [mode, setMode] = useState<TrendMode>("spend");
   const chartData = useMemo(
@@ -62,7 +64,7 @@ export function UsageTrendChart({
             Daily trend
           </h2>
           <p className="text-xs text-muted-foreground">
-            Production {modeLabel(mode).toLowerCase()} by provider for{" "}
+            {sourceLabel} {modeLabel(mode).toLowerCase()} by provider for{" "}
             {windowLabel.toLowerCase()}.
           </p>
         </div>

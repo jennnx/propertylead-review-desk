@@ -191,8 +191,10 @@ export async function listDecidedHubSpotWritebackReviewItems(): Promise<
 export async function findHubSpotWritebackReviewDetail(
   id: string,
 ): Promise<HubSpotWritebackReviewDetail | null> {
-  const row = await getPrismaClient().hubSpotWriteback.findUnique({
-    where: { id },
+  const row = await getPrismaClient().hubSpotWriteback.findFirst({
+    where: {
+      OR: [{ id }, { hubSpotWorkflowRunId: id }],
+    },
     select: reviewRowSelect,
   });
 

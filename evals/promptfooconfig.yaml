@@ -1,12 +1,23 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: PropertyLead HubSpot Writeback Plan eval
 
-# Custom TypeScript provider. The `prompt` field below is unused by this
-# provider — the case payload comes in via the `case` test var. We still
-# declare a placeholder prompt because promptfoo requires one.
+# Custom TypeScript provider, configured once per Claude model variant. The
+# `prompt` field below is unused by this provider — the case payload comes in
+# via the `case` test var. We still declare a placeholder prompt because
+# promptfoo requires one.
 providers:
   - id: file://provider.ts
-    label: propertylead-eval-provider
+    label: claude-sonnet
+    config:
+      claudeModel: sonnet
+  - id: file://provider.ts
+    label: claude-opus
+    config:
+      claudeModel: opus
+  - id: file://provider.ts
+    label: claude-haiku
+    config:
+      claudeModel: haiku
 
 prompts:
   - "(eval provider reads the `case` test var; this prompt is unused)"

@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { importWithRequiredEnv } from "@/tests/env";
 
 const findMany = vi.fn();
+const findFirst = vi.fn();
 
 vi.mock("@/services/database", () => ({
   getPrismaClient: () => ({
     hubSpotWriteback: {
+      findFirst,
       findMany,
     },
   }),
@@ -20,6 +22,7 @@ vi.mock("@/services/hubspot", () => ({
 
 describe("HubSpot writeback review queries", () => {
   beforeEach(() => {
+    findFirst.mockReset();
     findMany.mockReset();
   });
 
@@ -60,6 +63,34 @@ describe("HubSpot writeback review queries", () => {
       "applied-1",
       "rejected-1",
     ]);
+  });
+
+  test("reads a Review Desk detail by writeback id or workflow-run id", async () => {
+    findFirst.mockResolvedValue(
+      buildReviewRow({
+        id: "writeback-1",
+        state: "PENDING",
+        reviewDeskFeedbackNote: null,
+        appliedAt: null,
+      }),
+    );
+
+    const { findHubSpotWritebackReviewDetail } =
+      await importWithRequiredEnv(() => import("./queries"));
+
+    const detail = await findHubSpotWritebackReviewDetail("workflow-run-1");
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [
+            { id: "workflow-run-1" },
+            { hubSpotWorkflowRunId: "workflow-run-1" },
+          ],
+        },
+      }),
+    );
+    expect(detail?.id).toBe("writeback-1");
   });
 });
 

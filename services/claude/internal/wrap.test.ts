@@ -126,6 +126,66 @@ describe("Instrumented Claude wrapper", () => {
     );
   });
 
+  test("attaches async telemetry context to successful and failed calls", async () => {
+    const innerCreate = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "msg_context_01",
+        model: "claude-sonnet-4-6-20251022",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+        content: [],
+      })
+      .mockRejectedValueOnce(new Error("provider timeout"));
+    const inner = { apiKey: "test-key", messages: { create: innerCreate } };
+
+    const { createInstrumentedClaude, runWithClaudeTelemetryContext } =
+      await importWithRequiredEnv(() => import("./wrap"));
+    const claude = createInstrumentedClaude(
+      inner as unknown as Parameters<typeof createInstrumentedClaude>[0],
+    );
+
+    await runWithClaudeTelemetryContext(
+      { hubSpotWorkflowRunId: "workflow-run-1" },
+      () =>
+        claude.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 256,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+    );
+    await expect(
+      runWithClaudeTelemetryContext(
+        { hubSpotWorkflowRunId: "workflow-run-1" },
+        () =>
+          claude.messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 256,
+            messages: [{ role: "user", content: "hi again" }],
+          }),
+      ),
+    ).rejects.toThrow("provider timeout");
+
+    expect(recordLlmCall).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        context: { hubSpotWorkflowRunId: "workflow-run-1" },
+        status: "ok",
+      }),
+    );
+    expect(recordLlmCall).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        context: { hubSpotWorkflowRunId: "workflow-run-1" },
+        status: "error",
+      }),
+    );
+  });
+
   test("does not surface telemetry write failures to the caller", async () => {
     const innerCreate = vi.fn().mockResolvedValue({
       id: "msg_01",

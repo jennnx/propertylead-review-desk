@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { runWithClaudeTelemetryContext } from "@/services/claude";
 import { hubSpot } from "@/services/hubspot";
 
 import {
@@ -92,9 +93,13 @@ export async function handleInboundMessageWorkflowEvent({
     enrichmentInputContext,
   );
 
-  const planResult = await requestInboundMessageWritebackPlan({
-    enrichmentInputContext,
-  });
+  const planResult = await runWithClaudeTelemetryContext(
+    { hubSpotWorkflowRunId: runId },
+    () =>
+      requestInboundMessageWritebackPlan({
+        enrichmentInputContext,
+      }),
+  );
 
   await recordHubSpotWorkflowRunWritebackPlanTrace(runId, {
     input: planResult.input,
