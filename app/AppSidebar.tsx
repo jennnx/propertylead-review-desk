@@ -22,7 +22,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
 } from "@/components/ui/sidebar";
 
 import { AutoApproveContainer } from "./AutoApproveContainer";
@@ -100,9 +99,7 @@ export function AppSidebar({ autoModeEnabled }: { autoModeEnabled: boolean }) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarSeparator className="my-1" />
-
-        <SidebarGroup className="py-2">
+        <SidebarGroup className="mt-auto py-2">
           <SidebarGroupContent>
             <SidebarMenu>
               {developerDestinations.map((destination) => {
