@@ -2,17 +2,20 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { importWithRequiredEnv } from "@/tests/env";
 
-const findUnique = vi.fn();
-const updateMany = vi.fn();
+const claimHubSpotWebhookEventForProcessing = vi.fn();
+const getHubSpotWebhookEventForProcessing = vi.fn();
+const markHubSpotWebhookEventFailed = vi.fn();
+const markHubSpotWebhookEventProcessed = vi.fn();
 const handleHubSpotWebhookEvent = vi.fn();
 
-vi.mock("@/services/database", () => ({
-  getPrismaClient: () => ({
-    hubSpotWebhookEvent: {
-      findUnique,
-      updateMany,
-    },
-  }),
+vi.mock("./internal/mutations", () => ({
+  claimHubSpotWebhookEventForProcessing,
+  markHubSpotWebhookEventFailed,
+  markHubSpotWebhookEventProcessed,
+}));
+
+vi.mock("./internal/queries", () => ({
+  getHubSpotWebhookEventForProcessing,
 }));
 
 vi.mock("@/services/hubspot-workflows", () => ({
@@ -21,16 +24,18 @@ vi.mock("@/services/hubspot-workflows", () => ({
 
 describe("HubSpot queue processing service", () => {
   beforeEach(() => {
-    findUnique.mockReset();
-    updateMany.mockReset();
+    claimHubSpotWebhookEventForProcessing.mockReset();
+    claimHubSpotWebhookEventForProcessing.mockResolvedValue(true);
+    getHubSpotWebhookEventForProcessing.mockReset();
+    markHubSpotWebhookEventFailed.mockReset();
+    markHubSpotWebhookEventFailed.mockResolvedValue(undefined);
+    markHubSpotWebhookEventProcessed.mockReset();
+    markHubSpotWebhookEventProcessed.mockResolvedValue(undefined);
     handleHubSpotWebhookEvent.mockReset();
   });
 
   test("claims a HubSpot Webhook Processing Job, delegates the HubSpot workflow, and marks the event processed", async () => {
-    updateMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 1 });
-    findUnique.mockResolvedValue({
+    getHubSpotWebhookEventForProcessing.mockResolvedValue({
       id: "hubspot-event-to-process",
       normalizedEvent: {
         type: "contact.created",
@@ -48,25 +53,12 @@ describe("HubSpot queue processing service", () => {
       hubSpotWebhookEventId: "hubspot-event-to-process",
     });
 
-    expect(updateMany).toHaveBeenNthCalledWith(1, {
-      where: {
-        id: "hubspot-event-to-process",
-        processingStatus: "NEW",
-      },
-      data: {
-        processingStatus: "PROCESSING",
-      },
-    });
-    expect(findUnique).toHaveBeenCalledWith({
-      where: {
-        id: "hubspot-event-to-process",
-      },
-      select: {
-        id: true,
-        normalizedEvent: true,
-        rawWebhook: true,
-      },
-    });
+    expect(claimHubSpotWebhookEventForProcessing).toHaveBeenCalledWith(
+      "hubspot-event-to-process",
+    );
+    expect(getHubSpotWebhookEventForProcessing).toHaveBeenCalledWith(
+      "hubspot-event-to-process",
+    );
     expect(handleHubSpotWebhookEvent).toHaveBeenCalledWith({
       hubSpotWebhookEventId: "hubspot-event-to-process",
       normalizedEvent: {
@@ -77,20 +69,14 @@ describe("HubSpot queue processing service", () => {
         eventId: 1001,
       },
     });
-    expect(updateMany).toHaveBeenNthCalledWith(2, {
-      where: {
-        id: "hubspot-event-to-process",
-        processingStatus: "PROCESSING",
-      },
-      data: {
-        processingStatus: "PROCESSED",
-        processedAt: expect.any(Date),
-      },
-    });
+    expect(markHubSpotWebhookEventProcessed).toHaveBeenCalledWith(
+      "hubspot-event-to-process",
+      expect.any(Date),
+    );
   });
 
   test("skips HubSpot Webhook Processing Jobs when the event is no longer new", async () => {
-    updateMany.mockResolvedValueOnce({ count: 0 });
+    claimHubSpotWebhookEventForProcessing.mockResolvedValue(false);
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
     const { processHubSpotWebhookProcessingJob } =
       await importWithRequiredEnv(() => import("./index"));
@@ -99,9 +85,9 @@ describe("HubSpot queue processing service", () => {
       hubSpotWebhookEventId: "already-claimed-event",
     });
 
-    expect(findUnique).not.toHaveBeenCalled();
+    expect(getHubSpotWebhookEventForProcessing).not.toHaveBeenCalled();
     expect(handleHubSpotWebhookEvent).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(claimHubSpotWebhookEventForProcessing).toHaveBeenCalledTimes(1);
     expect(consoleInfo).toHaveBeenCalledWith(
       "Skipped HubSpot Webhook Processing Job",
       {
@@ -112,10 +98,7 @@ describe("HubSpot queue processing service", () => {
   });
 
   test("retries HubSpot workflow handling internally before marking the event processed", async () => {
-    updateMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 1 });
-    findUnique.mockResolvedValue({
+    getHubSpotWebhookEventForProcessing.mockResolvedValue({
       id: "hubspot-event-retried-in-service",
       normalizedEvent: {
         type: "contact.created",
@@ -137,25 +120,16 @@ describe("HubSpot queue processing service", () => {
       hubSpotWebhookEventId: "hubspot-event-retried-in-service",
     });
 
-    expect(findUnique).toHaveBeenCalledTimes(3);
+    expect(getHubSpotWebhookEventForProcessing).toHaveBeenCalledTimes(3);
     expect(handleHubSpotWebhookEvent).toHaveBeenCalledTimes(3);
-    expect(updateMany).toHaveBeenNthCalledWith(2, {
-      where: {
-        id: "hubspot-event-retried-in-service",
-        processingStatus: "PROCESSING",
-      },
-      data: {
-        processingStatus: "PROCESSED",
-        processedAt: expect.any(Date),
-      },
-    });
+    expect(markHubSpotWebhookEventProcessed).toHaveBeenCalledWith(
+      "hubspot-event-retried-in-service",
+      expect.any(Date),
+    );
   });
 
   test("marks the HubSpot Webhook Event failed when all processing attempts fail", async () => {
-    updateMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 1 });
-    findUnique.mockResolvedValue({
+    getHubSpotWebhookEventForProcessing.mockResolvedValue({
       id: "hubspot-event-fails-in-service",
       normalizedEvent: {
         type: "contact.created",
@@ -178,16 +152,10 @@ describe("HubSpot queue processing service", () => {
       }),
     ).rejects.toThrow("persistent workflow failure");
 
-    expect(findUnique).toHaveBeenCalledTimes(3);
+    expect(getHubSpotWebhookEventForProcessing).toHaveBeenCalledTimes(3);
     expect(handleHubSpotWebhookEvent).toHaveBeenCalledTimes(3);
-    expect(updateMany).toHaveBeenNthCalledWith(2, {
-      where: {
-        id: "hubspot-event-fails-in-service",
-        processingStatus: "PROCESSING",
-      },
-      data: {
-        processingStatus: "FAILED",
-      },
-    });
+    expect(markHubSpotWebhookEventFailed).toHaveBeenCalledWith(
+      "hubspot-event-fails-in-service",
+    );
   });
 });

@@ -3,17 +3,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createHmacSignature } from "@/lib/hmac-signature";
 import { importWithRequiredEnv } from "@/tests/env";
 
-const createMany = vi.fn();
-const findMany = vi.fn();
+const recordHubSpotWebhookEvents = vi.fn();
 const enqueueQueueJobWithRetries = vi.fn();
 
-vi.mock("@/services/database", () => ({
-  getPrismaClient: () => ({
-    hubSpotWebhookEvent: {
-      createMany,
-      findMany,
-    },
-  }),
+vi.mock("./internal/mutations", () => ({
+  recordHubSpotWebhookEvents,
 }));
 
 vi.mock("@/services/queue", () => ({
@@ -25,8 +19,11 @@ vi.mock("@/services/queue", () => ({
 
 describe("HubSpot Webhooks service", () => {
   beforeEach(() => {
-    createMany.mockReset();
-    findMany.mockReset();
+    recordHubSpotWebhookEvents.mockReset();
+    recordHubSpotWebhookEvents.mockResolvedValue({
+      persistedEventCount: 0,
+      processingJobCandidates: [],
+    });
     enqueueQueueJobWithRetries.mockReset();
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Number("1710000000000") + 1_000));
@@ -37,12 +34,10 @@ describe("HubSpot Webhooks service", () => {
   });
 
   test("records contact creation HubSpot Webhook Events as new work for the worker", async () => {
-    createMany.mockResolvedValue({ count: 1 });
-    findMany.mockResolvedValue([
-      {
-        id: "hubspot-event-1",
-      },
-    ]);
+    recordHubSpotWebhookEvents.mockResolvedValue({
+      persistedEventCount: 1,
+      processingJobCandidates: [{ id: "hubspot-event-1" }],
+    });
     enqueueQueueJobWithRetries.mockResolvedValue(undefined);
     const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -78,22 +73,21 @@ describe("HubSpot Webhooks service", () => {
     expect(receipt.acceptedEventCount).toBe(1);
     expect(receipt.persistedEventCount).toBe(1);
     expect(receipt.enqueuedProcessingJobCount).toBe(1);
-    expect(createMany).toHaveBeenCalledWith({
-      data: [
+    expect(recordHubSpotWebhookEvents).toHaveBeenCalledWith(
+      [
         expect.objectContaining({
+          dedupeKey: expect.any(String),
           normalizedEvent: {
             type: "contact.created",
             hubSpotObjectId: "123",
             hubSpotPortalId: "789",
             occurredAt: "2024-03-09T15:59:59.000Z",
           },
-          processingStatus: "NEW",
           rawWebhook: rawEvents[0],
-          processedAt: null,
         }),
       ],
-      skipDuplicates: true,
-    });
+      new Date(Number(timestamp) + 1_000),
+    );
     expect(enqueueQueueJobWithRetries).toHaveBeenCalledWith({
       queueName: "hubspot.webhook.process",
       jobName: "hubspot.webhook.process",
@@ -105,12 +99,10 @@ describe("HubSpot Webhooks service", () => {
   });
 
   test("records conversation new MESSAGE HubSpot Webhook Events as new work for the worker", async () => {
-    createMany.mockResolvedValue({ count: 1 });
-    findMany.mockResolvedValue([
-      {
-        id: "hubspot-event-2",
-      },
-    ]);
+    recordHubSpotWebhookEvents.mockResolvedValue({
+      persistedEventCount: 1,
+      processingJobCandidates: [{ id: "hubspot-event-2" }],
+    });
     enqueueQueueJobWithRetries.mockResolvedValue(undefined);
     const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -145,9 +137,10 @@ describe("HubSpot Webhooks service", () => {
 
     expect(receipt.persistedEventCount).toBe(1);
     expect(receipt.enqueuedProcessingJobCount).toBe(1);
-    expect(createMany).toHaveBeenCalledWith({
-      data: [
+    expect(recordHubSpotWebhookEvents).toHaveBeenCalledWith(
+      [
         expect.objectContaining({
+          dedupeKey: expect.any(String),
           normalizedEvent: {
             type: "conversation.message.received",
             hubSpotObjectId: "321",
@@ -155,12 +148,11 @@ describe("HubSpot Webhooks service", () => {
             occurredAt: "2024-03-09T15:59:59.000Z",
             hubSpotMessageId: "555",
           },
-          processingStatus: "NEW",
           rawWebhook: rawEvents[0],
         }),
       ],
-      skipDuplicates: true,
-    });
+      new Date(Number(timestamp) + 1_000),
+    );
   });
 
   test("does not record non-target HubSpot Webhook Events", async () => {
@@ -206,16 +198,17 @@ describe("HubSpot Webhooks service", () => {
 
     expect(receipt.acceptedEventCount).toBe(3);
     expect(receipt.persistedEventCount).toBe(0);
-    expect(createMany).not.toHaveBeenCalled();
+    expect(recordHubSpotWebhookEvents).toHaveBeenCalledWith(
+      [],
+      new Date(Number(timestamp) + 1_000),
+    );
   });
 
   test("enqueues processing for duplicate HubSpot Webhook Events that are still new", async () => {
-    createMany.mockResolvedValue({ count: 0 });
-    findMany.mockResolvedValue([
-      {
-        id: "existing-new-hubspot-event",
-      },
-    ]);
+    recordHubSpotWebhookEvents.mockResolvedValue({
+      persistedEventCount: 0,
+      processingJobCandidates: [{ id: "existing-new-hubspot-event" }],
+    });
     enqueueQueueJobWithRetries.mockResolvedValue(undefined);
     const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
       import("./index"),
@@ -250,17 +243,18 @@ describe("HubSpot Webhooks service", () => {
 
     expect(receipt.persistedEventCount).toBe(0);
     expect(receipt.enqueuedProcessingJobCount).toBe(1);
-    expect(findMany).toHaveBeenCalledWith({
-      where: {
-        dedupeKey: {
-          in: [expect.any(String)],
-        },
-        processingStatus: "NEW",
-      },
-      select: {
-        id: true,
-      },
-    });
+    expect(recordHubSpotWebhookEvents).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          dedupeKey: expect.any(String),
+          normalizedEvent: expect.objectContaining({
+            type: "contact.created",
+            hubSpotObjectId: "123",
+          }),
+        }),
+      ],
+      new Date(Number(timestamp) + 1_000),
+    );
     expect(enqueueQueueJobWithRetries).toHaveBeenCalledWith({
       queueName: "hubspot.webhook.process",
       jobName: "hubspot.webhook.process",
@@ -272,12 +266,10 @@ describe("HubSpot Webhooks service", () => {
   });
 
   test("surfaces HubSpot Webhook Processing Job enqueue failures after retries are exhausted", async () => {
-    createMany.mockResolvedValue({ count: 1 });
-    findMany.mockResolvedValue([
-      {
-        id: "hubspot-event-enqueue-failure",
-      },
-    ]);
+    recordHubSpotWebhookEvents.mockResolvedValue({
+      persistedEventCount: 1,
+      processingJobCandidates: [{ id: "hubspot-event-enqueue-failure" }],
+    });
     enqueueQueueJobWithRetries.mockRejectedValue(new Error("redis unavailable"));
     const { receiveHubSpotWebhookBatch } = await importWithRequiredEnv(() =>
       import("./index"),

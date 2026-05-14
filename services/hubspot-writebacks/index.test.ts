@@ -15,14 +15,6 @@ const getContact = vi.fn();
 const updateContactProperties = vi.fn();
 const createContactNote = vi.fn();
 
-vi.mock("@/services/database", () => ({
-  getPrismaClient: () => ({
-    hubSpotWriteback: {
-      create,
-    },
-  }),
-}));
-
 vi.mock("./internal/queries", () => ({
   findHubSpotWritebackForApproval,
   getHubSpotWritebackAutoModeEnabled,
