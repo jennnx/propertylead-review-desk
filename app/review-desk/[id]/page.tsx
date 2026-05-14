@@ -70,13 +70,25 @@ export default async function ReviewDeskDetailPage({
         </header>
 
         <section className="overflow-hidden rounded-xl border border-border bg-elevated">
-          <div className="flex flex-col gap-2 border-b border-border px-5 py-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Claude recommends
-            </p>
-            <p className="text-[15px] leading-relaxed text-foreground">
-              {writeback.recommendationSummary}
-            </p>
+          <div className="flex flex-col gap-4 border-b border-border px-5 py-5">
+            <div className="flex flex-col gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Claude recommends
+              </p>
+              <p className="text-[15px] font-medium leading-relaxed text-foreground">
+                {writeback.recommendationSummary}
+              </p>
+            </div>
+            {writeback.plan.note ? (
+              <figure className="flex flex-col gap-1.5">
+                <figcaption className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Note to add in HubSpot
+                </figcaption>
+                <blockquote className="whitespace-pre-line rounded-md border border-l-2 border-border bg-canvas px-3.5 py-3 text-[13.5px] leading-relaxed text-foreground/90">
+                  {writeback.plan.note}
+                </blockquote>
+              </figure>
+            ) : null}
           </div>
           <div className="px-5 py-4">
             {isPending ? (
@@ -106,54 +118,47 @@ export default async function ReviewDeskDetailPage({
               <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
                 Why the AI suggested this
               </AccordionTrigger>
-              <AccordionContent className="px-5 pb-4 text-[13px] leading-relaxed text-foreground/85">
+              <AccordionContent className="whitespace-pre-line px-5 pb-4 text-[13px] leading-relaxed text-foreground/85">
                 {writeback.claudeReasoning}
               </AccordionContent>
             </AccordionItem>
-            <AccordionItem value="plan" className="border-b border-border last:border-0">
-              <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
-                What will change in HubSpot
-              </AccordionTrigger>
-              <AccordionContent className="px-5 pb-4">
-                <div className="flex flex-col gap-3">
-                  {writeback.plan.fieldUpdates.length > 0 ? (
-                    <div className="overflow-hidden rounded-md border border-border bg-canvas">
-                      <table className="w-full border-collapse text-[12px]">
-                        <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                          <tr>
-                            <th className="px-3 py-2 font-medium">Field</th>
-                            <th className="px-3 py-2 font-medium">New value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {writeback.plan.fieldUpdates.map((update) => (
-                            <tr
-                              key={update.name}
-                              className="border-t border-border first:border-t-0"
+            {writeback.plan.fieldUpdates.length > 0 ? (
+              <AccordionItem value="plan" className="border-b border-border last:border-0">
+                <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
+                  HubSpot field updates
+                </AccordionTrigger>
+                <AccordionContent className="px-5 pb-4">
+                  <div className="overflow-hidden rounded-md border border-border bg-canvas">
+                    <table className="w-full border-collapse text-[12px]">
+                      <thead className="border-b border-border bg-muted/40 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Field</th>
+                          <th className="px-3 py-2 font-medium">New value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {writeback.plan.fieldUpdates.map((update) => (
+                          <tr
+                            key={update.name}
+                            className="border-t border-border first:border-t-0"
+                          >
+                            <td className="px-3 py-2.5 font-medium tracking-tight">
+                              {update.label}
+                            </td>
+                            <td
+                              data-nums="tabular"
+                              className="px-3 py-2.5 text-foreground/80"
                             >
-                              <td className="px-3 py-2.5 font-medium tracking-tight">
-                                {update.label}
-                              </td>
-                              <td
-                                data-nums="tabular"
-                                className="px-3 py-2.5 text-foreground/80"
-                              >
-                                {formatPlanValue(update.value)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
-                  {writeback.plan.note ? (
-                    <div className="whitespace-pre-line rounded-md border border-border bg-canvas px-3 py-2.5 text-[12.5px] leading-relaxed text-foreground/85">
-                      {writeback.plan.note}
-                    </div>
-                  ) : null}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
+                              {formatPlanValue(update.value)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ) : null}
             <AccordionItem value="context" className="border-b border-border last:border-0">
               <AccordionTrigger className="px-5 py-3.5 text-[13px] font-medium tracking-tight hover:no-underline">
                 Context used by the AI
