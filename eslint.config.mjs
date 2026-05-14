@@ -62,6 +62,22 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Evals are a privileged consumer of service internals — they exercise
+    // the real `request…WritebackPlan` path end-to-end and must import from
+    // `services/hubspot-workflows/internal/` directly. Widening the service's
+    // public surface for eval needs would be the tail wagging the dog
+    // (see issue #56 / PRD #55).
+    files: ["evals/**/*.ts", "evals/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [prismaClientPattern, getPrismaClientPattern],
+        },
+      ],
+    },
+  },
+  {
     // ADR 0009 allowlist: queries.ts, mutations.ts, and services/database/**
     // own the direct database access surface. Inside these files
     // `@prisma/client` and `getPrismaClient` are the entire point, so the
