@@ -1,5 +1,9 @@
 import {
+  getModelUsageBreakdownInWindow,
+  getProviderUsageBreakdownInWindow,
   getUsageOverviewInWindow,
+  type LlmCallModelUsageBreakdown,
+  type LlmCallProviderUsageBreakdown,
   type UsageDailyTrendPoint as UsageDailyTrendPointReadModel,
   type UsageOverviewReadModel,
   type UsageProviderSpend as UsageProviderSpendReadModel,
@@ -21,6 +25,11 @@ export type UsageOverview = UsageOverviewReadModel;
 export type UsageScorecardSummary = UsageScorecardSummaryReadModel;
 export type UsageTrendProviderPoint = UsageTrendProviderPointReadModel;
 export type UsageDailyTrendPoint = UsageDailyTrendPointReadModel;
+
+export type UsageBreakdown = {
+  providers: LlmCallProviderUsageBreakdown[];
+  models: LlmCallModelUsageBreakdown[];
+};
 
 export async function getProductionUsageTotalSpend(input: {
   window: UsageTimeWindowPreset;
@@ -45,6 +54,24 @@ export async function getProductionUsageOverview(input: {
     to: input.now,
     source: "PRODUCTION",
   });
+}
+
+export async function getProductionUsageBreakdown(input: {
+  window: UsageTimeWindowPreset;
+  now: Date;
+}): Promise<UsageBreakdown> {
+  const from = resolveWindowStart(input.window, input.now);
+  const queryWindow = {
+    from,
+    to: input.now,
+    source: "PRODUCTION" as const,
+  };
+  const [providers, models] = await Promise.all([
+    getProviderUsageBreakdownInWindow(queryWindow),
+    getModelUsageBreakdownInWindow(queryWindow),
+  ]);
+
+  return { providers, models };
 }
 
 function resolveWindowStart(

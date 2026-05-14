@@ -9,8 +9,10 @@ export {
 } from "./internal/record";
 
 export {
+  getProductionUsageBreakdown,
   getProductionUsageOverview,
   getProductionUsageTotalSpend,
+  type UsageBreakdown,
   type UsageDailyTrendPoint,
   type UsageOverview,
   type UsageProviderSpend,

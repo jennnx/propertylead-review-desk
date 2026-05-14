@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import {
+  getProductionUsageBreakdown,
   getProductionUsageOverview,
   type UsageProviderSpend,
   type UsageScorecardSummary,
@@ -12,6 +13,7 @@ import {
 } from "@/services/llm-telemetry";
 
 import { TimeWindowSelector } from "./TimeWindowSelector";
+import { UsageBreakdownSections } from "./UsageBreakdownSections";
 import { UsageTrendChart } from "./UsageTrendChart";
 
 const TIME_WINDOW_PRESETS: ReadonlyArray<{
@@ -41,10 +43,17 @@ export default async function UsagePage({
   const params = await searchParams;
   const window = parseWindow(params.window);
 
-  const usage = await getProductionUsageOverview({
-    window,
-    now: new Date(),
-  });
+  const now = new Date();
+  const [usage, usageBreakdown] = await Promise.all([
+    getProductionUsageOverview({
+      window,
+      now,
+    }),
+    getProductionUsageBreakdown({
+      window,
+      now,
+    }),
+  ]);
 
   const windowLabel =
     TIME_WINDOW_PRESETS.find((preset) => preset.value === window)?.label ??
@@ -76,6 +85,11 @@ export default async function UsagePage({
 
         <UsageTrendChart
           data={usage.dailyTrend}
+          windowLabel={windowLabel}
+        />
+
+        <UsageBreakdownSections
+          breakdown={usageBreakdown}
           windowLabel={windowLabel}
         />
       </div>

@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { importWithRequiredEnv } from "@/tests/env";
 
 const getProductionUsageOverview = vi.fn();
+const getProductionUsageBreakdown = vi.fn();
 
 vi.mock("@/services/llm-telemetry", () => ({
+  getProductionUsageBreakdown,
   getProductionUsageOverview,
 }));
 
@@ -19,6 +21,7 @@ vi.mock("./UsageTrendChart", () => ({
 
 describe("UsagePage", () => {
   beforeEach(() => {
+    getProductionUsageBreakdown.mockReset();
     getProductionUsageOverview.mockReset();
   });
 
@@ -39,6 +42,10 @@ describe("UsagePage", () => {
       },
       dailyTrend: [],
     });
+    getProductionUsageBreakdown.mockResolvedValue({
+      providers: [],
+      models: [],
+    });
 
     const { default: UsagePage } = await importWithRequiredEnv(() =>
       import("./page"),
@@ -55,6 +62,10 @@ describe("UsagePage", () => {
     expect(markup).toContain("Voyage");
     expect(markup).toContain("$0.0150");
     expect(getProductionUsageOverview).toHaveBeenCalledWith({
+      window: "7d",
+      now: expect.any(Date),
+    });
+    expect(getProductionUsageBreakdown).toHaveBeenCalledWith({
       window: "7d",
       now: expect.any(Date),
     });
