@@ -129,8 +129,8 @@ export default async function UsagePage({
   const sourceLabel = source === "all" ? "Production + eval" : "Production";
 
   return (
-    <main className="min-h-svh bg-canvas text-foreground">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-10 lg:px-10">
+    <main className="min-h-svh w-full overflow-x-clip bg-canvas text-foreground">
+      <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-10 px-6 py-10 lg:px-10">
         <header className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
@@ -203,7 +203,7 @@ function UsageScorecard({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid min-w-0 grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 xl:grid-cols-5">
         <ScorecardTile
           label="LLM calls"
           value={scorecard.callCount.toLocaleString("en-US")}
@@ -310,8 +310,8 @@ function ScorecardTile({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-32 flex-col justify-between gap-4 bg-elevated px-5 py-4">
-      <div className="flex flex-col gap-2">
+    <div className="flex min-h-32 min-w-0 flex-col justify-between gap-4 bg-elevated px-5 py-4">
+      <div className="flex min-w-0 flex-col gap-2">
         <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {label}
         </p>
