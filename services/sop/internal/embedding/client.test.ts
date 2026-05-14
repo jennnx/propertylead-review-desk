@@ -1,8 +1,19 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { importWithRequiredEnv } from "@/tests/env";
 
+const recordLlmCall = vi.fn();
+
+vi.mock("@/services/llm-telemetry", () => ({
+  recordLlmCall,
+}));
+
 describe("Voyage embedding client", () => {
+  beforeEach(() => {
+    recordLlmCall.mockReset();
+    recordLlmCall.mockResolvedValue(undefined);
+  });
+
   test("batches document embedding requests while preserving output order", async () => {
     const embedding = new Array(1024).fill(0.01);
     const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -14,6 +25,8 @@ describe("Voyage embedding client", () => {
       return {
         ok: true,
         json: async () => ({
+          model: "voyage-3",
+          usage: { total_tokens: body.input.length * 11 },
           data: body.input.map((text) => ({
             embedding: embedding.map((value) => value + Number(text.slice(4)) / 1000),
           })),
@@ -29,6 +42,7 @@ describe("Voyage embedding client", () => {
     const texts = Array.from({ length: 129 }, (_, index) => `doc-${index}`);
     const embeddings = await createVoyageEmbeddingClient().embedTexts(texts, {
       inputType: "document",
+      telemetryContext: { sopDocumentId: "doc-telemetry" },
     });
 
     expect(embeddings).toHaveLength(129);
@@ -53,5 +67,61 @@ describe("Voyage embedding client", () => {
       input_type: "document",
       input: ["doc-128"],
     });
+
+    expect(recordLlmCall).toHaveBeenCalledTimes(2);
+    expect(recordLlmCall).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        provider: "voyage",
+        requestedModelAlias: "voyage-3",
+        responseModelSnapshot: "voyage-3",
+        usage: { totalTokens: 1408 },
+        source: "production",
+        status: "ok",
+        context: { sopDocumentId: "doc-telemetry" },
+      }),
+    );
+    expect(recordLlmCall).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        provider: "voyage",
+        requestedModelAlias: "voyage-3",
+        responseModelSnapshot: "voyage-3",
+        usage: { totalTokens: 11 },
+        status: "ok",
+        context: { sopDocumentId: "doc-telemetry" },
+      }),
+    );
+  });
+
+  test("records a telemetry row on a transport error and rethrows", async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Voyage API connection refused"));
+    vi.stubGlobal("fetch", fetch);
+
+    const { createVoyageEmbeddingClient } = await importWithRequiredEnv(() =>
+      import("./client"),
+    );
+
+    await expect(
+      createVoyageEmbeddingClient().embedTexts(["Call every lead quickly."], {
+        inputType: "document",
+        telemetryContext: { sopDocumentId: "doc-error" },
+      }),
+    ).rejects.toThrow("Voyage API connection refused");
+
+    expect(recordLlmCall).toHaveBeenCalledTimes(1);
+    expect(recordLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "voyage",
+        requestedModelAlias: "voyage-3",
+        responseModelSnapshot: null,
+        usage: { totalTokens: 0 },
+        status: "error",
+        errorMessage: "Voyage API connection refused",
+        context: { sopDocumentId: "doc-error" },
+      }),
+    );
   });
 });

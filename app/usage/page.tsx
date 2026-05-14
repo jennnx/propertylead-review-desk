@@ -4,8 +4,10 @@ import Link from "next/link";
 
 import {
   getProductionUsageTotalSpend,
+  type UsageProviderSpend,
   type UsageTimeWindowPreset,
 } from "@/services/llm-telemetry";
+import { Badge } from "@/components/ui/badge";
 
 import { TimeWindowSelector } from "./TimeWindowSelector";
 
@@ -89,6 +91,9 @@ export default async function UsagePage({
                   ? `${totalSpend.callCount} call${totalSpend.callCount === 1 ? "" : "s"} without pricing data · ${windowLabel.toLowerCase()}`
                   : `${totalSpend.callCount} production call${totalSpend.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`}
             </p>
+            <ProviderSpendBreakdown
+              providers={totalSpend.providerBreakdown}
+            />
             {totalSpend.costNullCount > 0 && !allUncosted ? (
               <p className="mt-2 text-xs text-muted-foreground">
                 {totalSpend.costNullCount} call
@@ -103,6 +108,29 @@ export default async function UsagePage({
         ) : null}
       </div>
     </main>
+  );
+}
+
+function ProviderSpendBreakdown({
+  providers,
+}: {
+  providers: UsageProviderSpend[];
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {providers.map((provider) => (
+        <Badge
+          key={provider.provider}
+          variant="outline"
+          className="h-6 gap-1.5 px-2.5 font-mono tabular-nums"
+        >
+          <span className="font-sans text-muted-foreground">
+            {formatProviderLabel(provider.provider)}
+          </span>
+          {formatUsd(provider.totalCostUsd)}
+        </Badge>
+      ))}
+    </div>
   );
 }
 
@@ -127,6 +155,10 @@ function NoActivityHint({ window }: { window: string }) {
       </p>
     </div>
   );
+}
+
+function formatProviderLabel(provider: UsageProviderSpend["provider"]): string {
+  return provider === "anthropic" ? "Anthropic" : "Voyage";
 }
 
 function formatUsd(value: number): string {

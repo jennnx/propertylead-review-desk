@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { recordLlmCall, type LlmCallSource } from "@/services/llm-telemetry";
 
 export const VOYAGE_EMBEDDING_MODEL = "voyage-3";
 export const VOYAGE_EMBEDDING_DIMENSIONS = 1024;
@@ -10,6 +11,9 @@ export type VoyageEmbeddingClient = {
     input: string[],
     options: {
       inputType: VoyageEmbeddingInputType;
+      telemetryContext?: {
+        sopDocumentId?: string | null;
+      };
     },
   ): Promise<number[][]>;
 };
@@ -18,6 +22,16 @@ type VoyageEmbeddingResponse = {
   data?: Array<{
     embedding?: unknown;
   }>;
+  model?: unknown;
+  usage?: {
+    total_tokens?: unknown;
+  };
+};
+
+type ParsedVoyageEmbeddingResponse = {
+  embeddings: number[][];
+  modelSnapshot: string | null;
+  totalTokens: number;
 };
 
 const IS_TEST_ENV = process.env.NODE_ENV === "test";
@@ -33,15 +47,38 @@ export function createVoyageEmbeddingClient(): VoyageEmbeddingClient {
       const embeddings: number[][] = [];
 
       for (const batch of createEmbeddingBatches(texts)) {
-        const response = await fetchWithRetry(batch, options.inputType);
+        const startedAt = Date.now();
 
-        if (!response.ok) {
-          throw new Error(`Voyage embeddings request failed with ${response.status}`);
+        try {
+          const response = await fetchWithRetry(batch, options.inputType);
+
+          if (!response.ok) {
+            throw new Error(
+              `Voyage embeddings request failed with ${response.status}`,
+            );
+          }
+
+          const payload = (await response.json()) as VoyageEmbeddingResponse;
+          const parsed = parseEmbeddingResponse(payload, batch.length);
+          await safelyRecordVoyageCall({
+            status: "ok",
+            latencyMs: Date.now() - startedAt,
+            responseModelSnapshot: parsed.modelSnapshot,
+            usage: { totalTokens: parsed.totalTokens },
+            sopDocumentId: options.telemetryContext?.sopDocumentId ?? null,
+          });
+          embeddings.push(...parsed.embeddings);
+        } catch (error) {
+          await safelyRecordVoyageCall({
+            status: "error",
+            latencyMs: Date.now() - startedAt,
+            responseModelSnapshot: null,
+            usage: { totalTokens: 0 },
+            errorMessage: toErrorMessage(error),
+            sopDocumentId: options.telemetryContext?.sopDocumentId ?? null,
+          });
+          throw error;
         }
-
-        const payload = (await response.json()) as VoyageEmbeddingResponse;
-        const batchEmbeddings = parseEmbeddings(payload, batch.length);
-        embeddings.push(...batchEmbeddings);
       }
 
       return embeddings;
@@ -114,10 +151,10 @@ function createEmbeddingBatches(texts: string[]): string[][] {
   return batches;
 }
 
-function parseEmbeddings(
+function parseEmbeddingResponse(
   payload: VoyageEmbeddingResponse,
   expectedCount: number,
-): number[][] {
+): ParsedVoyageEmbeddingResponse {
   const embeddings =
     payload.data?.map((item) => {
       if (!Array.isArray(item.embedding)) {
@@ -137,7 +174,14 @@ function parseEmbeddings(
     throw new Error("Voyage embeddings response did not match input count.");
   }
 
-  return embeddings;
+  return {
+    embeddings,
+    modelSnapshot: typeof payload.model === "string" ? payload.model : null,
+    totalTokens:
+      typeof payload.usage?.total_tokens === "number"
+        ? payload.usage.total_tokens
+        : 0,
+  };
 }
 
 function isRetryableVoyageResponse(response: Response): boolean {
@@ -164,4 +208,58 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function readTelemetrySource(): LlmCallSource {
+  return process.env.LLM_TELEMETRY_SOURCE === "eval" ? "eval" : "production";
+}
+
+async function safelyRecordVoyageCall(
+  input: {
+    latencyMs: number;
+    responseModelSnapshot: string | null;
+    usage: { totalTokens: number };
+    sopDocumentId: string | null;
+  } & (
+    | { status: "ok"; errorMessage?: never }
+    | { status: "error"; errorMessage: string }
+  ),
+): Promise<void> {
+  try {
+    const base = {
+      provider: "voyage" as const,
+      requestedModelAlias: VOYAGE_EMBEDDING_MODEL,
+      responseModelSnapshot: input.responseModelSnapshot,
+      usage: input.usage,
+      latencyMs: input.latencyMs,
+      source: readTelemetrySource(),
+      context: {
+        sopDocumentId: input.sopDocumentId,
+      },
+    };
+
+    if (input.status === "error") {
+      await recordLlmCall({
+        ...base,
+        status: "error",
+        errorMessage: input.errorMessage,
+      });
+      return;
+    }
+
+    await recordLlmCall({
+      ...base,
+      status: "ok",
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "unknown telemetry error";
+    console.warn(`llm-telemetry record failed: ${message}`);
+  }
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message.trim().length > 0
+    ? error.message
+    : "unknown Voyage embeddings error";
 }

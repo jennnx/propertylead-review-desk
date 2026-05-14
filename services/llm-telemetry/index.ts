@@ -10,6 +10,7 @@ export {
 
 export {
   getProductionUsageTotalSpend,
+  type UsageProviderSpend,
   type UsageTimeWindowPreset,
   type UsageTotalSpend,
 } from "./internal/operations";

@@ -39,6 +39,7 @@ async function ingestSopDocument(sopDocumentId: string): Promise<void> {
     chunks.map((chunk) => chunk.text),
     {
       inputType: "document",
+      telemetryContext: { sopDocumentId: document.id },
     },
   );
   if (embeddings.length !== chunks.length) {
