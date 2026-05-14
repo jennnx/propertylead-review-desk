@@ -98,21 +98,33 @@ _Avoid_: Direct AI writeback, final CRM state
 The static, pre-approved set of HubSpot properties PropertyLead Review Desk may propose in HubSpot Writeback Plans.
 _Avoid_: Dynamic property discovery, arbitrary AI-selected fields
 
+**Operator**:
+The real estate agent who uses PropertyLead Review Desk to watch the AI handle their leads, to decide whether each HubSpot Writeback Plan should be applied, and to author the SOP Documents that tell the AI how their business works. The operator is the primary audience for top-level UI surfaces (home/dashboard, Review Desk, SOP Library, anything in the main sidebar). Developers also use this app — for evals, diagnostics, prompt tuning, and other deep fine-tuning — but they are not the operator; developer-facing surfaces should stay visibly distinct from the operator's primary surfaces and should not appear in the operator's main flow.
+_Avoid_: User, reviewer, manager (the operator is specifically the real estate agent)
+
 **Review Desk**:
-The internal trust-building workspace where an operator (real estate agent, manager, or developer during early fine-tuning) inspects Claude's HubSpot Writeback Plans, approves or rejects each one, and signals repeated mistakes back to the developer so prompts, SOPs, or code can improve. The Review Desk exists primarily to move the customer from "AI we don't yet trust" to "AI we let run"; in steady-state the Review Desk is barely used because Auto-Mode is on. It surfaces what triggered each HubSpot Workflow Run, what Claude proposed, and the context Claude reasoned over — not a HubSpot field editor.
+The internal trust-building workspace where the operator inspects Claude's HubSpot Writeback Plans, approves or rejects each one, and signals repeated mistakes back to the developer so prompts, SOPs, or code can improve. The Review Desk exists primarily to move the customer from "AI we don't yet trust" to "AI we let run"; in steady-state the Review Desk is barely used because Auto-Mode is on. It surfaces what triggered each HubSpot Workflow Run, what Claude proposed, and the context Claude reasoned over — not a HubSpot field editor.
 _Avoid_: Inbox, lead queue, CRM editor, audit log (the audit/history view is part of the Review Desk, not a separate surface)
 
 **Auto-Mode**:
 A global PropertyLead Review Desk setting that, when enabled, causes newly produced HubSpot Writeback Plans to be applied to HubSpot without waiting for an operator approval. Auto-Mode is the intended steady-state of the app — the Review Desk's approval gate is fine-tuning scaffolding that exists to make Auto-Mode safe to leave on. Plans applied in Auto-Mode still surface on the Review Desk in the historical view with a clear indication they were auto-applied. Auto-Mode is read at plan-finalization time, not retroactively: plans already awaiting an operator decision when Auto-Mode is toggled on remain awaiting that decision.
 _Avoid_: Auto-pilot, headless mode, silent writeback (Auto-Mode is still observable on the Review Desk)
+_Operator UI copy_: shown to the operator as **Auto-approve**. When this toggle is on, AI suggestions enter the **auto-approved** state without an operator decision.
 
 **HubSpot Writeback**:
 The durable record of PropertyLead Review Desk's outbound mutation against HubSpot for a single HubSpot Workflow Run. A HubSpot Writeback is the integration-boundary peer of a HubSpot Webhook Event — webhook events represent HubSpot telling us something; HubSpot Writebacks represent us telling HubSpot something. Each HubSpot Writeback carries the HubSpot Writeback Plan produced by its run and records whether that plan was applied to HubSpot (by operator approval or by Auto-Mode), rejected by an operator, plus any optional operator feedback note left for the developer.
 _Avoid_: Writeback action, application, mutation log (the HubSpot Writeback is the single durable record of the act); operator decision (the decision is a state on the HubSpot Writeback, not a separate entity)
+_Operator UI copy_: shown to the operator as an **AI suggestion**, with states **approved** (APPLIED), **auto-approved** (AUTO_APPLIED), **rejected** (REJECTED), and **awaiting review** (PENDING). The code-side term "HubSpot Writeback" never appears in operator-facing surfaces; it is reserved for developer-facing surfaces and internal logs.
+
+**SOP Document**:
+A document the operator authors to tell the AI how their real-estate business works — the rules, playbooks, scripts, and judgement calls the operator wants the AI to follow when handling their leads. Operators upload SOP Documents as files (PDF, Markdown, plain text); PropertyLead Review Desk chunks and embeds them and supplies the relevant pieces to Claude as part of the Enrichment Input Context for each HubSpot Workflow Run. From the operator's standpoint an SOP Document is *the operator teaching the AI their playbook*; the chunking, embedding, and retrieval-k details are implementation concerns and stay off operator-facing surfaces.
+_Avoid_: Knowledge base article, RAG document, embedded document, prompt fragment (these are implementation framings, not operator framings)
+_Operator UI copy_: shown as the operator's **rules for the AI** or **playbook**. The SOP Library is the surface where operators drag-and-drop their playbooks; processing internals (chunk counts, embedding status, retrieval-k) do not appear in operator-facing copy. When the AI ignores or misapplies an SOP, the operator should learn about it through Review Desk feedback ("the AI missed your rule X"), not by inspecting SOP internals.
 
 **Review Desk Feedback Note**:
 An optional free-text note an operator may attach to a HubSpot Writeback — most commonly on a rejection — explaining why Claude's plan was wrong, so the developer can adjust prompts, SOPs, or code. Feedback Notes exist for the developer's benefit during the trust-building phase; they do not influence HubSpot behavior and the rejection action itself never requires one.
 _Avoid_: Rejection reason, operator comment, structured feedback category (notes are free text; no taxonomy in v1)
+_Operator UI copy_: surfaced as **Give the AI feedback**. The operator-facing framing is that they are coaching the AI, even though in practice the note is read by the developer and does not feed back into Claude's prompts automatically. Within the same surface, the structured plan sections are labelled **What the AI wants to change** (HubSpot Writeback Plan), **Why the AI suggested this** (Claude Reasoning), and **Context used by the AI** (Enrichment Input Context — rendered as raw JSON; an honest "this is the technical input" framing rather than a polished summary).
 
 ## Relationships
 
