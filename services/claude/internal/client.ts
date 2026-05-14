@@ -12,7 +12,7 @@ export type ClaudeModel = (typeof CLAUDE_MODELS)[keyof typeof CLAUDE_MODELS];
 
 export const DEFAULT_CLAUDE_MODEL: ClaudeModel = CLAUDE_MODELS.SONNET;
 
-export const claude = new Anthropic({
+export const rawClaude = new Anthropic({
   apiKey: env.ANTHROPIC_API_KEY,
 });
 

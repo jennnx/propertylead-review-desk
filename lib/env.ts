@@ -33,6 +33,9 @@ const envSchema = z.object({
   HUBSPOT_ACCESS_TOKEN: z
     .string({ error: "HUBSPOT_ACCESS_TOKEN is required" })
     .min(1, "HUBSPOT_ACCESS_TOKEN must not be empty"),
+  LLM_TELEMETRY_SOURCE: z
+    .enum(["production", "eval"])
+    .default("production"),
 });
 
 export type Env = z.infer<typeof envSchema>;

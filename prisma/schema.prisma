@@ -51,6 +51,21 @@ enum SopDocumentProcessingStatus {
   FAILED     @map("failed")
 }
 
+enum LlmCallProvider {
+  ANTHROPIC @map("anthropic")
+  VOYAGE    @map("voyage")
+}
+
+enum LlmCallSource {
+  PRODUCTION @map("production")
+  EVAL       @map("eval")
+}
+
+enum LlmCallStatus {
+  OK    @map("ok")
+  ERROR @map("error")
+}
+
 model HubSpotWebhookEvent {
   id               String                              @id @default(cuid())
   dedupeKey        String                              @unique
@@ -81,6 +96,7 @@ model HubSpotWorkflowRun {
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
   hubSpotWriteback       HubSpotWriteback?
+  llmCalls               LlmCall[]
 
   @@index([status, createdAt])
   @@map("hubspot_workflow_runs")
@@ -118,6 +134,7 @@ model SopDocument {
   processingStatus SopDocumentProcessingStatus @default(PROCESSING)
   failureMessage   String?
   chunks           SopChunk[]
+  llmCalls         LlmCall[]
 
   @@index([processingStatus, uploadedAt])
   @@map("sop_documents")
@@ -133,4 +150,30 @@ model SopChunk {
 
   @@unique([sopDocumentId, ordinal])
   @@map("sop_chunks")
+}
+
+model LlmCall {
+  id                    String              @id @default(cuid())
+  provider              LlmCallProvider
+  modelAlias            String
+  modelSnapshot         String
+  source                LlmCallSource       @default(PRODUCTION)
+  inputTokens           Int?
+  outputTokens          Int?
+  cacheCreationTokens   Int?
+  cacheReadTokens       Int?
+  totalTokens           Int?
+  costUsd               Decimal?            @db.Decimal(12, 8)
+  latencyMs             Int
+  status                LlmCallStatus       @default(OK)
+  errorMessage          String?
+  hubSpotWorkflowRunId  String?
+  hubSpotWorkflowRun    HubSpotWorkflowRun? @relation(fields: [hubSpotWorkflowRunId], references: [id], onDelete: SetNull)
+  sopDocumentId         String?
+  sopDocument           SopDocument?        @relation(fields: [sopDocumentId], references: [id], onDelete: SetNull)
+  createdAt             DateTime            @default(now())
+
+  @@index([source, createdAt])
+  @@index([provider, modelAlias, createdAt])
+  @@map("llm_calls")
 }
