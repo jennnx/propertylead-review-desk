@@ -18,9 +18,6 @@ export {
 } from "./internal/operations";
 
 export {
-  getOperatorRecommendationSummary,
   getOperatorSuggestionStateCopy,
-  type OperatorRecommendationPlan,
-  type OperatorSuggestionStateCopy,
   type OperatorSuggestionTone,
 } from "./internal/operator-copy";
