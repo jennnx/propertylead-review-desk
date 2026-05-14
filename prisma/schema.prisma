@@ -152,10 +152,22 @@ model SopChunk {
   @@map("sop_chunks")
 }
 
+// One row per provider service-method invocation (e.g. one `messages.create`
+// call). Telemetry is numeric and metadata only — never prompts, responses,
+// or contact content. Cost is computed at write time and frozen here so
+// historical rows survive pricing-table updates.
 model LlmCall {
   id                    String              @id @default(cuid())
   provider              LlmCallProvider
+  /// Grouping key — e.g. "claude-sonnet-4-6". Matches the pricing-reference
+  /// key; always set even when the wrapper had to fall back from the
+  /// response snapshot.
   modelAlias            String
+  /// What the provider actually echoed back as the model. Anthropic
+  /// sometimes returns a dated snapshot ("claude-sonnet-4-6-20251022") and
+  /// sometimes the alias itself ("claude-sonnet-4-6"); both shapes are
+  /// stored verbatim. Equal to modelAlias when the provider echoed the
+  /// alias rather than a dated snapshot — not a data layer bug.
   modelSnapshot         String
   source                LlmCallSource       @default(PRODUCTION)
   inputTokens           Int?

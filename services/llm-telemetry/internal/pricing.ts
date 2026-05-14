@@ -35,8 +35,11 @@ export const ANTHROPIC_SNAPSHOT_TO_ALIAS: Record<string, string> = {
   "claude-opus-4-7-20260114": "claude-opus-4-7",
 };
 
+// Cache-creation rates below are the 5-minute TTL tier. The 1-hour TTL
+// tier is 2× these numbers per Anthropic's pricing page — instrument that
+// separately if and when a caller starts opting into the 1h cache.
 export const LLM_PRICING_TABLE: Record<string, PricingEntry> = {
-  // Anthropic Sonnet 4.6 — $3 / $15 input/output, cache write $3.75, cache read $0.30.
+  // Anthropic Sonnet 4.6 — $3 / $15 input/output, cache write $3.75 (5m), cache read $0.30.
   "anthropic:claude-sonnet-4-6": {
     provider: "anthropic",
     inputUsdPerMillion: 3,
@@ -44,7 +47,7 @@ export const LLM_PRICING_TABLE: Record<string, PricingEntry> = {
     cacheCreationUsdPerMillion: 3.75,
     cacheReadUsdPerMillion: 0.3,
   },
-  // Anthropic Opus 4.7 — $15 / $75 input/output, cache write $18.75, cache read $1.50.
+  // Anthropic Opus 4.7 — $15 / $75 input/output, cache write $18.75 (5m), cache read $1.50.
   "anthropic:claude-opus-4-7": {
     provider: "anthropic",
     inputUsdPerMillion: 15,
@@ -77,8 +80,7 @@ export function resolveAnthropicAlias(
     return ANTHROPIC_SNAPSHOT_TO_ALIAS[responseModel] ?? requestedAlias;
   }
   // Already-an-alias response (e.g. caller passed an alias and the SDK
-  // echoed it back) is its own alias.
-  if (responseModel in LLM_PRICING_TABLE) return responseModel;
+  // echoed it back rather than a dated snapshot) is its own alias.
   if (pricingKey("anthropic", responseModel) in LLM_PRICING_TABLE) {
     return responseModel;
   }

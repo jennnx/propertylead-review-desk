@@ -4,10 +4,22 @@ import type {
   MessageCreateParamsNonStreaming,
 } from "@anthropic-ai/sdk/resources/messages";
 
-import { env } from "@/lib/env";
-import { recordLlmCall } from "@/services/llm-telemetry";
+import { recordLlmCall, type LlmCallSource } from "@/services/llm-telemetry";
 
 import { rawClaude } from "./client";
+
+// Note: `hubSpotWorkflowRunId` is intentionally not plumbed from the
+// writeback path in this slice. Every row from production today has FK
+// null. Follow-up: issue #68.
+
+// `lib/env` validates LLM_TELEMETRY_SOURCE at startup via Zod (so a typo
+// fails the boot). Inside the wrapper we re-read `process.env` per call so
+// `vi.stubEnv("LLM_TELEMETRY_SOURCE", "eval")` works in tests without
+// `vi.resetModules()`. Validated values are guaranteed; we fall back to
+// "production" defensively.
+function readTelemetrySource(): LlmCallSource {
+  return process.env.LLM_TELEMETRY_SOURCE === "eval" ? "eval" : "production";
+}
 
 export type InstrumentedClaude = {
   apiKey: string | null;
@@ -18,8 +30,6 @@ export type InstrumentedClaude = {
     ): Promise<Message>;
   };
 };
-
-const TELEMETRY_SOURCE = env.LLM_TELEMETRY_SOURCE;
 
 export function createInstrumentedClaude(
   inner: Anthropic = rawClaude,
@@ -54,7 +64,7 @@ async function instrumentedCreate(
         cacheReadTokens: response.usage?.cache_read_input_tokens ?? 0,
       },
       latencyMs,
-      source: TELEMETRY_SOURCE,
+      source: readTelemetrySource(),
       status: "ok",
     });
 
@@ -74,7 +84,7 @@ async function instrumentedCreate(
         cacheReadTokens: 0,
       },
       latencyMs,
-      source: TELEMETRY_SOURCE,
+      source: readTelemetrySource(),
       status: "error",
       errorMessage: message,
     });

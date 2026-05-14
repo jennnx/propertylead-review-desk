@@ -42,6 +42,9 @@ export default async function UsagePage({
   });
 
   const hasData = totalSpend.callCount > 0;
+  const allUncosted =
+    hasData && totalSpend.costNullCount === totalSpend.callCount;
+  const hasKnownCost = hasData && !allUncosted;
   const windowLabel =
     TIME_WINDOW_PRESETS.find((preset) => preset.value === window)?.label ??
     DEFAULT_WINDOW;
@@ -70,7 +73,7 @@ export default async function UsagePage({
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Total spend
             </p>
-            {hasData ? (
+            {hasKnownCost ? (
               <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
                 {formatUsd(totalSpend.totalCostUsd)}
               </p>
@@ -80,11 +83,13 @@ export default async function UsagePage({
               </p>
             )}
             <p className="mt-2 text-xs text-muted-foreground">
-              {hasData
-                ? `${totalSpend.callCount} production call${totalSpend.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`
-                : `No activity in ${windowLabel.toLowerCase()}`}
+              {!hasData
+                ? `No activity in ${windowLabel.toLowerCase()}`
+                : allUncosted
+                  ? `${totalSpend.callCount} call${totalSpend.callCount === 1 ? "" : "s"} without pricing data · ${windowLabel.toLowerCase()}`
+                  : `${totalSpend.callCount} production call${totalSpend.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`}
             </p>
-            {totalSpend.costNullCount > 0 ? (
+            {totalSpend.costNullCount > 0 && !allUncosted ? (
               <p className="mt-2 text-xs text-muted-foreground">
                 {totalSpend.costNullCount} call
                 {totalSpend.costNullCount === 1 ? "" : "s"} without pricing data
@@ -125,11 +130,15 @@ function NoActivityHint({ window }: { window: string }) {
 }
 
 function formatUsd(value: number): string {
+  // For very small per-call costs ($0.000132 etc.), surface 6 decimal places
+  // to match the schema precision rather than clamping to 4 and losing the
+  // tail. Standard 2-digit display for everything from $1 up.
+  const fractionDigits = value < 0.01 ? 6 : value < 1 ? 4 : 2;
   const formatter = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: value < 1 ? 4 : 2,
-    maximumFractionDigits: value < 1 ? 4 : 2,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   });
   return formatter.format(value);
 }
