@@ -59,13 +59,13 @@ describe("LLM usage overview queries", () => {
     const overview = await getUsageOverviewInWindow({
       from: new Date(2026, 4, 12),
       to: new Date(2026, 4, 15),
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          source: "PRODUCTION",
+          source: { in: ["PRODUCTION"] },
           createdAt: {
             gte: new Date(2026, 4, 12),
             lt: new Date(2026, 4, 15),
@@ -115,7 +115,7 @@ describe("LLM usage overview queries", () => {
     const overview = await getUsageOverviewInWindow({
       from: new Date("2026-05-12T00:00:00.000Z"),
       to: new Date("2026-05-15T00:00:00.000Z"),
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     expect(overview).toEqual({
@@ -155,7 +155,7 @@ describe("LLM usage overview queries", () => {
     const overview = await getUsageOverviewInWindow({
       from: new Date(2026, 4, 12),
       to: new Date(2026, 4, 14),
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     expect(overview.dailyTrend).toEqual([
@@ -168,6 +168,113 @@ describe("LLM usage overview queries", () => {
         date: "2026-05-13",
         anthropic: { spendUsd: 0, callCount: 0, tokenCount: 0 },
         voyage: { spendUsd: 0, callCount: 0, tokenCount: 0 },
+      },
+    ]);
+  });
+});
+
+describe("LLM telemetry drilldown queries", () => {
+  beforeEach(() => {
+    findMany.mockReset();
+    queryRaw.mockReset();
+  });
+
+  test("returns recent calls with originating context labels and all-source filtering", async () => {
+    findMany.mockResolvedValue([
+      buildDrilldownRow({
+        id: "call-1",
+        provider: "ANTHROPIC",
+        modelAlias: "claude-sonnet-4-6",
+        modelSnapshot: "claude-sonnet-4-6-20251022",
+        inputTokens: 12_300,
+        outputTokens: 540,
+        cacheReadTokens: 8_100,
+        costUsd: { toString: () => "0.03450000" },
+        latencyMs: 1832,
+        status: "OK",
+        hubSpotWorkflowRunId: "workflow-run-1",
+      }),
+      buildDrilldownRow({
+        id: "call-2",
+        provider: "VOYAGE",
+        modelAlias: "voyage-3-large",
+        modelSnapshot: "voyage-3-large",
+        totalTokens: 2400,
+        costUsd: null,
+        latencyMs: 210,
+        status: "ERROR",
+        sopDocumentId: "sop-1",
+        sopDocument: { originalFilename: "Buyer intake playbook.pdf" },
+      }),
+    ]);
+
+    const { listUsageDrilldownRowsInWindow } =
+      await importWithRequiredEnv(() => import("./queries"));
+
+    const rows = await listUsageDrilldownRowsInWindow({
+      from: new Date("2026-05-01T00:00:00.000Z"),
+      to: new Date("2026-05-14T00:00:00.000Z"),
+      sources: ["PRODUCTION", "EVAL"],
+      providers: ["ANTHROPIC"],
+      modelAliases: ["claude-sonnet-4-6"],
+      statuses: ["OK"],
+      skip: 25,
+      take: 25,
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          source: { in: ["PRODUCTION", "EVAL"] },
+          createdAt: {
+            gte: new Date("2026-05-01T00:00:00.000Z"),
+            lt: new Date("2026-05-14T00:00:00.000Z"),
+          },
+          provider: { in: ["ANTHROPIC"] },
+          modelAlias: { in: ["claude-sonnet-4-6"] },
+          status: { in: ["OK"] },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: 25,
+        take: 25,
+      }),
+    );
+    expect(rows).toEqual([
+      {
+        id: "call-1",
+        provider: "anthropic",
+        modelAlias: "claude-sonnet-4-6",
+        modelSnapshot: "claude-sonnet-4-6-20251022",
+        source: "production",
+        inputTokens: 12300,
+        outputTokens: 540,
+        cacheCreationTokens: null,
+        cacheReadTokens: 8100,
+        totalTokens: null,
+        costUsd: 0.0345,
+        latencyMs: 1832,
+        status: "ok",
+        createdAt: new Date("2026-05-12T00:00:00.000Z"),
+        hubSpotWorkflowRunId: "workflow-run-1",
+        sopDocumentFilename: null,
+      },
+      {
+        id: "call-2",
+        provider: "voyage",
+        modelAlias: "voyage-3-large",
+        modelSnapshot: "voyage-3-large",
+        source: "production",
+        inputTokens: null,
+        outputTokens: null,
+        cacheCreationTokens: null,
+        cacheReadTokens: null,
+        totalTokens: 2400,
+        costUsd: null,
+        latencyMs: 210,
+        status: "error",
+        createdAt: new Date("2026-05-12T00:00:00.000Z"),
+        hubSpotWorkflowRunId: null,
+        sopDocumentFilename: "Buyer intake playbook.pdf",
       },
     ]);
   });
@@ -219,7 +326,7 @@ describe("LLM telemetry usage breakdown queries", () => {
     const rows = await getProviderUsageBreakdownInWindow({
       from: new Date("2026-05-01T00:00:00.000Z"),
       to: new Date("2026-05-14T00:00:00.000Z"),
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     expect(rows).toEqual([
@@ -267,7 +374,7 @@ describe("LLM telemetry usage breakdown queries", () => {
     await getProviderUsageBreakdownInWindow({
       from,
       to,
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     const sql = queryRaw.mock.calls[0][0] as {
@@ -275,7 +382,7 @@ describe("LLM telemetry usage breakdown queries", () => {
       values: unknown[];
     };
     expect(sql.values).toEqual(["production", to, from]);
-    expect(sql.sql).toContain('WHERE source = ?::"LlmCallSource"');
+    expect(sql.sql).toContain('WHERE source = ANY(ARRAY[?]::"LlmCallSource"[])');
     expect(sql.sql).toContain('AND "createdAt" < ?');
     expect(sql.sql).toContain('AND "createdAt" >= ?');
     expect(sql.sql).toContain('GROUP BY provider');
@@ -322,7 +429,7 @@ describe("LLM telemetry usage breakdown queries", () => {
     const rows = await getModelUsageBreakdownInWindow({
       from: null,
       to: new Date("2026-05-14T00:00:00.000Z"),
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     expect(rows).toEqual([
@@ -367,7 +474,7 @@ describe("LLM telemetry usage breakdown queries", () => {
     await getModelUsageBreakdownInWindow({
       from: null,
       to,
-      source: "PRODUCTION",
+      sources: ["PRODUCTION"],
     });
 
     const sql = queryRaw.mock.calls[0][0] as {
@@ -375,7 +482,7 @@ describe("LLM telemetry usage breakdown queries", () => {
       values: unknown[];
     };
     expect(sql.values).toEqual(["production", to]);
-    expect(sql.sql).toContain('WHERE source = ?::"LlmCallSource"');
+    expect(sql.sql).toContain('WHERE source = ANY(ARRAY[?]::"LlmCallSource"[])');
     expect(sql.sql).toContain('AND "createdAt" < ?');
     expect(sql.sql).not.toContain('AND "createdAt" >= ?');
     expect(sql.sql).toContain('GROUP BY provider, "modelAlias"');
@@ -396,7 +503,7 @@ describe("LLM telemetry usage breakdown queries", () => {
       getProviderUsageBreakdownInWindow({
         from: new Date("2026-05-14T00:00:00.000Z"),
         to: new Date("2026-05-15T00:00:00.000Z"),
-        source: "PRODUCTION",
+        sources: ["PRODUCTION"],
       }),
     ).resolves.toEqual([]);
 
@@ -404,7 +511,7 @@ describe("LLM telemetry usage breakdown queries", () => {
       getModelUsageBreakdownInWindow({
         from: new Date("2026-05-14T00:00:00.000Z"),
         to: new Date("2026-05-15T00:00:00.000Z"),
-        source: "PRODUCTION",
+        sources: ["PRODUCTION"],
       }),
     ).resolves.toEqual([]);
   });
@@ -435,6 +542,49 @@ function buildUsageRow(
     latencyMs: 1,
     status: "OK",
     createdAt: new Date("2026-05-12T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function buildDrilldownRow(
+  overrides: Partial<{
+    id: string;
+    provider: "ANTHROPIC" | "VOYAGE";
+    modelAlias: string;
+    modelSnapshot: string;
+    source: "PRODUCTION" | "EVAL";
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheCreationTokens: number | null;
+    cacheReadTokens: number | null;
+    totalTokens: number | null;
+    costUsd: unknown;
+    latencyMs: number;
+    status: "OK" | "ERROR";
+    createdAt: Date;
+    hubSpotWorkflowRunId: string | null;
+    sopDocumentId: string | null;
+    sopDocument: { originalFilename: string } | null;
+  }> = {},
+) {
+  return {
+    id: "call-1",
+    provider: "ANTHROPIC",
+    modelAlias: "claude-sonnet-4-6",
+    modelSnapshot: "claude-sonnet-4-6",
+    source: "PRODUCTION",
+    inputTokens: null,
+    outputTokens: null,
+    cacheCreationTokens: null,
+    cacheReadTokens: null,
+    totalTokens: null,
+    costUsd: null,
+    latencyMs: 1,
+    status: "OK",
+    createdAt: new Date("2026-05-12T00:00:00.000Z"),
+    hubSpotWorkflowRunId: null,
+    sopDocumentId: null,
+    sopDocument: null,
     ...overrides,
   };
 }

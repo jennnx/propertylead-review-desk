@@ -25,6 +25,7 @@ export function TimeWindowSelector({
     } else {
       params.set("window", next);
     }
+    params.delete("page");
     const query = params.toString();
     startTransition(() => {
       router.push(query ? `${pathname}?${query}` : pathname);

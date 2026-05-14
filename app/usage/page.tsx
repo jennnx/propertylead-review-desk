@@ -5,13 +5,19 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import {
-  getProductionUsageBreakdown,
-  getProductionUsageOverview,
+  getUsageBreakdown,
+  getUsageDrilldown,
+  getUsageOverview,
+  type UsageDrilldownProvider,
+  type UsageDrilldownStatus,
   type UsageProviderSpend,
   type UsageScorecardSummary,
+  type UsageSourceFilter,
   type UsageTimeWindowPreset,
 } from "@/services/llm-telemetry";
 
+import { UsageDrilldownTable } from "./UsageDrilldownTable";
+import { UsageSourceToggle } from "./UsageSourceToggle";
 import { TimeWindowSelector } from "./TimeWindowSelector";
 import { UsageBreakdownSections } from "./UsageBreakdownSections";
 import { UsageTrendChart } from "./UsageTrendChart";
@@ -28,6 +34,17 @@ const TIME_WINDOW_PRESETS: ReadonlyArray<{
 ];
 
 const DEFAULT_WINDOW: UsageTimeWindowPreset = "30d";
+const DEFAULT_SOURCE: UsageSourceFilter = "production";
+const DRILLDOWN_PAGE_SIZE = 25;
+
+type UsageSearchParams = {
+  window?: string | string[];
+  source?: string | string[];
+  provider?: string | string[];
+  model?: string | string[];
+  status?: string | string[];
+  page?: string | string[];
+};
 
 function parseWindow(raw: string | string[] | undefined): UsageTimeWindowPreset {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -35,29 +52,81 @@ function parseWindow(raw: string | string[] | undefined): UsageTimeWindowPreset 
   return match?.value ?? DEFAULT_WINDOW;
 }
 
+function parseSource(raw: string | string[] | undefined): UsageSourceFilter {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "all" ? "all" : DEFAULT_SOURCE;
+}
+
+function parsePage(raw: string | string[] | undefined): number {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function parseProviders(
+  raw: string | string[] | undefined,
+): UsageDrilldownProvider[] {
+  return parseMulti(raw).filter(
+    (value): value is UsageDrilldownProvider =>
+      value === "anthropic" || value === "voyage",
+  );
+}
+
+function parseStatuses(
+  raw: string | string[] | undefined,
+): UsageDrilldownStatus[] {
+  return parseMulti(raw).filter(
+    (value): value is UsageDrilldownStatus =>
+      value === "ok" || value === "error",
+  );
+}
+
+function parseMulti(raw: string | string[] | undefined): string[] {
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
 export default async function UsagePage({
   searchParams,
 }: {
-  searchParams: Promise<{ window?: string | string[] }>;
+  searchParams: Promise<UsageSearchParams>;
 }) {
   const params = await searchParams;
   const window = parseWindow(params.window);
+  const source = parseSource(params.source);
+  const providers = parseProviders(params.provider);
+  const modelAliases = parseMulti(params.model);
+  const statuses = parseStatuses(params.status);
+  const page = parsePage(params.page);
 
   const now = new Date();
-  const [usage, usageBreakdown] = await Promise.all([
-    getProductionUsageOverview({
+  const [usage, usageBreakdown, drilldown] = await Promise.all([
+    getUsageOverview({
       window,
       now,
+      source,
     }),
-    getProductionUsageBreakdown({
+    getUsageBreakdown({
       window,
       now,
+      source,
+    }),
+    getUsageDrilldown({
+      window,
+      now,
+      source,
+      providers,
+      modelAliases,
+      statuses,
+      page,
+      pageSize: DRILLDOWN_PAGE_SIZE,
     }),
   ]);
 
   const windowLabel =
     TIME_WINDOW_PRESETS.find((preset) => preset.value === window)?.label ??
     "Last 30 days";
+  const sourceLabel = source === "all" ? "Production + eval" : "Production";
 
   return (
     <main className="min-h-svh bg-canvas text-foreground">
@@ -72,25 +141,45 @@ export default async function UsagePage({
               makes.
             </p>
           </div>
-          <TimeWindowSelector
-            presets={TIME_WINDOW_PRESETS}
-            value={window}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <TimeWindowSelector
+              presets={TIME_WINDOW_PRESETS}
+              value={window}
+            />
+            <UsageSourceToggle value={source} />
+          </div>
         </header>
 
         <UsageScorecard
           scorecard={usage.scorecard}
           windowLabel={windowLabel}
+          sourceLabel={sourceLabel}
         />
 
         <UsageTrendChart
           data={usage.dailyTrend}
           windowLabel={windowLabel}
+          sourceLabel={sourceLabel}
         />
 
         <UsageBreakdownSections
           breakdown={usageBreakdown}
           windowLabel={windowLabel}
+          sourceLabel={sourceLabel}
+        />
+
+        <UsageDrilldownTable
+          drilldown={drilldown}
+          query={{
+            window,
+            source,
+            providers,
+            modelAliases,
+            statuses,
+            page: drilldown.pageInfo.page,
+          }}
+          windowLabel={windowLabel}
+          sourceLabel={sourceLabel}
         />
       </div>
     </main>
@@ -100,14 +189,16 @@ export default async function UsagePage({
 function UsageScorecard({
   scorecard,
   windowLabel,
+  sourceLabel,
 }: {
   scorecard: UsageScorecardSummary;
   windowLabel: string;
+  sourceLabel: string;
 }) {
   const hasData = scorecard.callCount > 0;
   const hasPricedCalls = scorecard.pricedCallCount > 0;
   const quietHint = hasData
-    ? `${scorecard.callCount} production call${scorecard.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`
+    ? `${scorecard.callCount} ${sourceLabel.toLowerCase()} call${scorecard.callCount === 1 ? "" : "s"} · ${windowLabel.toLowerCase()}`
     : "Quiet so far";
 
   return (

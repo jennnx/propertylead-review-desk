@@ -4,9 +4,11 @@ import type { UsageBreakdown } from "@/services/llm-telemetry";
 export function UsageBreakdownSections({
   breakdown,
   windowLabel,
+  sourceLabel,
 }: {
   breakdown: UsageBreakdown;
   windowLabel: string;
+  sourceLabel: string;
 }) {
   return (
     <section className="flex flex-col gap-4">
@@ -15,8 +17,8 @@ export function UsageBreakdownSections({
           Token & latency breakdown
         </h2>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Production calls in {windowLabel.toLowerCase()}, grouped by provider
-          and model alias.
+          {sourceLabel} calls in {windowLabel.toLowerCase()}, grouped by
+          provider and model alias.
         </p>
       </header>
 
