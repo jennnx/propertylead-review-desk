@@ -3,14 +3,24 @@ import type {
   Message,
   MessageCreateParamsNonStreaming,
 } from "@anthropic-ai/sdk/resources/messages";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-import { recordLlmCall, type LlmCallSource } from "@/services/llm-telemetry";
+import {
+  recordLlmCall,
+  type LlmCallSource,
+  type RecordLlmCallContext,
+} from "@/services/llm-telemetry";
 
 import { rawClaude } from "./client";
 
-// Note: `hubSpotWorkflowRunId` is intentionally not plumbed from the
-// writeback path in this slice. Every row from production today has FK
-// null. Follow-up: issue #68.
+const telemetryContextStorage = new AsyncLocalStorage<RecordLlmCallContext>();
+
+export async function runWithClaudeTelemetryContext<T>(
+  context: RecordLlmCallContext,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return telemetryContextStorage.run(context, operation);
+}
 
 // `lib/env` validates LLM_TELEMETRY_SOURCE at startup via Zod (so a typo
 // fails the boot). Inside the wrapper we re-read `process.env` per call so
@@ -65,6 +75,7 @@ async function instrumentedCreate(
       },
       latencyMs,
       source: readTelemetrySource(),
+      context: telemetryContextStorage.getStore(),
       status: "ok",
     });
 
@@ -85,6 +96,7 @@ async function instrumentedCreate(
       },
       latencyMs,
       source: readTelemetrySource(),
+      context: telemetryContextStorage.getStore(),
       status: "error",
       errorMessage: message,
     });

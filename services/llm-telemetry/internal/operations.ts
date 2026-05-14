@@ -141,27 +141,28 @@ export async function getUsageDrilldown(input: {
   };
   const page = Math.max(1, Math.floor(input.page));
   const pageSize = Math.max(1, Math.floor(input.pageSize));
-  const [rows, totalCount, filterOptions] = await Promise.all([
-    listUsageDrilldownRowsInWindow({
-      ...filteredWindow,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
+  const [totalCount, filterOptions] = await Promise.all([
     countUsageDrilldownRowsInWindow(filteredWindow),
     getUsageDrilldownFilterOptionsInWindow(queryWindow),
   ]);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const resolvedPage = Math.min(page, totalPages);
+  const rows = await listUsageDrilldownRowsInWindow({
+    ...filteredWindow,
+    skip: (resolvedPage - 1) * pageSize,
+    take: pageSize,
+  });
 
   return {
     rows,
     filterOptions,
     pageInfo: {
-      page,
+      page: resolvedPage,
       pageSize,
       totalCount,
       totalPages,
-      hasPreviousPage: page > 1,
-      hasNextPage: page < totalPages,
+      hasPreviousPage: resolvedPage > 1,
+      hasNextPage: resolvedPage < totalPages,
     },
   };
 }

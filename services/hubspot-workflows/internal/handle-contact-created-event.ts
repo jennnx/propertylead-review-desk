@@ -1,4 +1,5 @@
 import { hubSpot } from "@/services/hubspot";
+import { runWithClaudeTelemetryContext } from "@/services/claude";
 
 import {
   ENRICHMENT_INPUT_CONTACT_PROPERTY_NAMES,
@@ -46,9 +47,13 @@ export async function handleContactCreatedWorkflowEvent({
     enrichmentInputContext,
   );
 
-  const planResult = await requestContactCreatedWritebackPlan({
-    enrichmentInputContext,
-  });
+  const planResult = await runWithClaudeTelemetryContext(
+    { hubSpotWorkflowRunId: runId },
+    () =>
+      requestContactCreatedWritebackPlan({
+        enrichmentInputContext,
+      }),
+  );
 
   await recordHubSpotWorkflowRunWritebackPlanTrace(runId, {
     input: planResult.input,

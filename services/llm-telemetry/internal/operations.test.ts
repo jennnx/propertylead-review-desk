@@ -201,4 +201,45 @@ describe("LLM usage operations", () => {
       sources: ["PRODUCTION", "EVAL"],
     });
   });
+
+  test("clamps drilldown pages past the result set to the last page", async () => {
+    listUsageDrilldownRowsInWindow.mockResolvedValue([{ id: "call-26" }]);
+    countUsageDrilldownRowsInWindow.mockResolvedValue(26);
+    getUsageDrilldownFilterOptionsInWindow.mockResolvedValue({
+      providers: [],
+      modelAliases: [],
+      statuses: [],
+    });
+
+    const { getUsageDrilldown } = await importWithRequiredEnv(() =>
+      import("./operations"),
+    );
+    const now = new Date("2026-05-14T12:00:00.000Z");
+
+    const drilldown = await getUsageDrilldown({
+      window: "30d",
+      now,
+      source: "production",
+      providers: [],
+      modelAliases: [],
+      statuses: [],
+      page: 999,
+      pageSize: 25,
+    });
+
+    expect(drilldown.pageInfo).toEqual({
+      page: 2,
+      pageSize: 25,
+      totalCount: 26,
+      totalPages: 2,
+      hasPreviousPage: true,
+      hasNextPage: false,
+    });
+    expect(listUsageDrilldownRowsInWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 25,
+        take: 25,
+      }),
+    );
+  });
 });
