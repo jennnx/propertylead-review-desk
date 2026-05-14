@@ -22,6 +22,10 @@ export const metadata: Metadata = {
   description: "Review desk for PropertyLead lead triage.",
 };
 
+// The Review Desk is an operator console — every view must reflect live
+// HubSpot/Prisma state, not a build-time snapshot. Cascades to all pages.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
