@@ -3,11 +3,13 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 
 import {
+  getProductionUsageBreakdown,
   getProductionUsageTotalSpend,
   type UsageTimeWindowPreset,
 } from "@/services/llm-telemetry";
 
 import { TimeWindowSelector } from "./TimeWindowSelector";
+import { UsageBreakdownSections } from "./UsageBreakdownSections";
 
 const TIME_WINDOW_PRESETS: ReadonlyArray<{
   value: UsageTimeWindowPreset;
@@ -36,10 +38,17 @@ export default async function UsagePage({
   const params = await searchParams;
   const window = parseWindow(params.window);
 
-  const totalSpend = await getProductionUsageTotalSpend({
-    window,
-    now: new Date(),
-  });
+  const now = new Date();
+  const [totalSpend, usageBreakdown] = await Promise.all([
+    getProductionUsageTotalSpend({
+      window,
+      now,
+    }),
+    getProductionUsageBreakdown({
+      window,
+      now,
+    }),
+  ]);
 
   const hasData = totalSpend.callCount > 0;
   const allUncosted =
@@ -101,6 +110,11 @@ export default async function UsagePage({
         {!hasData ? (
           <NoActivityHint window={windowLabel} />
         ) : null}
+
+        <UsageBreakdownSections
+          breakdown={usageBreakdown}
+          windowLabel={windowLabel}
+        />
       </div>
     </main>
   );

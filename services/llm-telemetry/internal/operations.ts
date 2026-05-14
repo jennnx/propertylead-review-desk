@@ -1,4 +1,10 @@
-import { getTotalSpendInWindow } from "./queries";
+import {
+  getModelUsageBreakdownInWindow,
+  getProviderUsageBreakdownInWindow,
+  getTotalSpendInWindow,
+  type LlmCallModelUsageBreakdown,
+  type LlmCallProviderUsageBreakdown,
+} from "./queries";
 
 export type UsageTimeWindowPreset = "24h" | "7d" | "30d" | "90d" | "all-time";
 
@@ -6,6 +12,11 @@ export type UsageTotalSpend = {
   totalCostUsd: number;
   callCount: number;
   costNullCount: number;
+};
+
+export type UsageBreakdown = {
+  providers: LlmCallProviderUsageBreakdown[];
+  models: LlmCallModelUsageBreakdown[];
 };
 
 export async function getProductionUsageTotalSpend(input: {
@@ -23,6 +34,24 @@ export async function getProductionUsageTotalSpend(input: {
     callCount: row.callCount,
     costNullCount: row.costNullCount,
   };
+}
+
+export async function getProductionUsageBreakdown(input: {
+  window: UsageTimeWindowPreset;
+  now: Date;
+}): Promise<UsageBreakdown> {
+  const from = resolveWindowStart(input.window, input.now);
+  const queryWindow = {
+    from,
+    to: input.now,
+    source: "PRODUCTION" as const,
+  };
+  const [providers, models] = await Promise.all([
+    getProviderUsageBreakdownInWindow(queryWindow),
+    getModelUsageBreakdownInWindow(queryWindow),
+  ]);
+
+  return { providers, models };
 }
 
 function resolveWindowStart(
