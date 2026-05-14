@@ -42,21 +42,22 @@ export type HubSpotConversationThreadList = {
   results: HubSpotConversationThread[];
 };
 
+type HubSpotPagingNext = {
+  after?: string;
+  link?: string;
+};
+
 type HubSpotConversationThreadPage = {
   results: HubSpotConversationThread[];
   paging?: {
-    next?: {
-      after?: string;
-    };
+    next?: HubSpotPagingNext;
   };
 };
 
 type HubSpotConversationThreadMessagesPage = {
   results: unknown[];
   paging?: {
-    next?: {
-      after?: string;
-    };
+    next?: HubSpotPagingNext;
   };
 };
 
@@ -64,6 +65,14 @@ const HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE = 100;
 const HUBSPOT_CONVERSATION_THREAD_MESSAGES_PAGE_SIZE = 100;
 const HUBSPOT_CONVERSATION_THREAD_MESSAGES_DEFAULT_LIMIT = 30;
 const HUBSPOT_NOTE_TO_CONTACT_ASSOCIATION_TYPE_ID = 202;
+// Hard cap on pagination follow-ups: HubSpot's `paging.next.after` cursors
+// have been observed to loop on themselves (the cursor returned by HubSpot
+// is URL-encoded as `MTE...%3D` — re-passing it via URLSearchParams
+// double-encodes the `%`, HubSpot doesn't match it, and serves the same
+// page forever). We now follow `paging.next.link` instead, but this cap is
+// the belt-and-suspenders backstop so a future contract change can't DDoS
+// HubSpot.
+const HUBSPOT_PAGINATION_MAX_PAGES = 20;
 
 export type HubSpotContactProperty = {
   name: string;
@@ -128,10 +137,11 @@ function createHubSpotClient(): HubSpotClient {
       };
     }
 
-    const response = await globalThis.fetch(
-      `${HUBSPOT_BASE_URL}${path}${formatSearchParams(input.searchParams)}`,
-      init,
-    );
+    const url = isAbsoluteUrl(path)
+      ? path
+      : `${HUBSPOT_BASE_URL}${path}${formatSearchParams(input.searchParams)}`;
+
+    const response = await globalThis.fetch(url, init);
 
     return parseHubSpotJsonResponse<T>(response);
   };
@@ -185,23 +195,18 @@ function createHubSpotClient(): HubSpotClient {
     },
     async listConversationThreads(input) {
       const results: HubSpotConversationThread[] = [];
-      let after: string | undefined;
+      const searchParams = new URLSearchParams({
+        associatedContactId: input.associatedContactId,
+        limit: String(HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE),
+      });
+      let nextUrl: string | undefined = `${HUBSPOT_BASE_URL}/conversations/v3/conversations/threads?${searchParams.toString()}`;
 
-      do {
-        const searchParams = new URLSearchParams({
-          associatedContactId: input.associatedContactId,
-          limit: String(HUBSPOT_CONVERSATION_THREADS_PAGE_SIZE),
-        });
-        if (after) searchParams.set("after", after);
-
-        const page = await request<HubSpotConversationThreadPage>(
-          `/conversations/v3/conversations/threads`,
-          { searchParams },
-        );
-
-        results.push(...page.results);
-        after = page.paging?.next?.after;
-      } while (after);
+      for (let page = 0; page < HUBSPOT_PAGINATION_MAX_PAGES; page++) {
+        if (!nextUrl) break;
+        const response: HubSpotConversationThreadPage = await request<HubSpotConversationThreadPage>(nextUrl);
+        results.push(...response.results);
+        nextUrl = response.paging?.next?.link;
+      }
 
       return { results };
     },
@@ -210,27 +215,21 @@ function createHubSpotClient(): HubSpotClient {
         input.limit ?? HUBSPOT_CONVERSATION_THREAD_MESSAGES_DEFAULT_LIMIT;
       if (targetLimit <= 0) return { results: [] };
       let buffer: unknown[] = [];
-      let after: string | undefined;
 
-      do {
-        const searchParams = new URLSearchParams({
-          limit: String(HUBSPOT_CONVERSATION_THREAD_MESSAGES_PAGE_SIZE),
-        });
-        if (after) searchParams.set("after", after);
+      const searchParams = new URLSearchParams({
+        limit: String(HUBSPOT_CONVERSATION_THREAD_MESSAGES_PAGE_SIZE),
+      });
+      let nextUrl: string | undefined = `${HUBSPOT_BASE_URL}/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}/messages?${searchParams.toString()}`;
 
-        const page = await request<HubSpotConversationThreadMessagesPage>(
-          `/conversations/v3/conversations/threads/${encodeURIComponent(
-            threadId,
-          )}/messages`,
-          { searchParams },
-        );
-
-        buffer.push(...page.results);
+      for (let page = 0; page < HUBSPOT_PAGINATION_MAX_PAGES; page++) {
+        if (!nextUrl) break;
+        const response: HubSpotConversationThreadMessagesPage = await request<HubSpotConversationThreadMessagesPage>(nextUrl);
+        buffer.push(...response.results);
         if (buffer.length > targetLimit) {
           buffer = buffer.slice(-targetLimit);
         }
-        after = page.paging?.next?.after;
-      } while (after);
+        nextUrl = response.paging?.next?.link;
+      }
 
       return { results: buffer };
     },
@@ -250,6 +249,10 @@ function createHubSpotClient(): HubSpotClient {
 function formatSearchParams(searchParams: URLSearchParams | undefined): string {
   if (!searchParams) return "";
   return `?${searchParams.toString()}`;
+}
+
+function isAbsoluteUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
 }
 
 async function parseHubSpotJsonResponse<T>(response: Response): Promise<T> {
