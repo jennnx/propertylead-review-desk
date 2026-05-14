@@ -1,10 +1,11 @@
 // Per-million-token rates for every (provider, modelAlias) we instrument.
 //
 // Rates are sourced from Anthropic's public pricing page
-// (https://www.anthropic.com/pricing) and frozen on historical rows at write
-// time — see services/llm-telemetry/internal/record.ts and cost.ts.
+// (https://www.anthropic.com/pricing) and Voyage's public pricing docs
+// (https://docs.voyageai.com/docs/pricing), then frozen on historical rows
+// at write time — see services/llm-telemetry/internal/record.ts and cost.ts.
 //
-// PR review note: cross-reference every entry against current Anthropic
+// PR review note: cross-reference every entry against the current provider
 // public pricing at merge time. Updates to live pricing are deliberate code
 // changes; historical rows already in the database keep the cost that was
 // computed when the call happened and do not get rewritten.
@@ -54,6 +55,11 @@ export const LLM_PRICING_TABLE: Record<string, PricingEntry> = {
     outputUsdPerMillion: 75,
     cacheCreationUsdPerMillion: 18.75,
     cacheReadUsdPerMillion: 1.5,
+  },
+  // Voyage 3 text embeddings — $0.06 per million tokens.
+  "voyage:voyage-3": {
+    provider: "voyage",
+    totalUsdPerMillion: 0.06,
   },
 };
 

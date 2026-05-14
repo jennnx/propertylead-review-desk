@@ -37,6 +37,19 @@ describe("LLM cost computation", () => {
     expect(cost).toBeCloseTo(27, 10);
   });
 
+  test("prices a Voyage 3 embedding call from total tokens", async () => {
+    const { computeLlmCallCostUsd } = await importWithRequiredEnv(() =>
+      import("./cost"),
+    );
+
+    // Voyage 3 is priced at $0.06 per 1,000,000 tokens.
+    const cost = computeLlmCallCostUsd("voyage", "voyage-3", {
+      totalTokens: 250_000,
+    });
+
+    expect(cost).toBeCloseTo(0.015, 10);
+  });
+
   test("returns null when no pricing entry exists for the alias", async () => {
     const { computeLlmCallCostUsd } = await importWithRequiredEnv(() =>
       import("./cost"),

@@ -20,6 +20,7 @@ const findSopDocumentById = vi.fn();
 const listRecentSopDocuments = vi.fn();
 const findMostSimilarSopChunks = vi.fn();
 const enqueueQueueJobWithRetries = vi.fn();
+const recordLlmCall = vi.fn();
 
 vi.mock("./internal/mutations", () => ({
   recordSopDocumentUpload,
@@ -41,6 +42,10 @@ vi.mock("@/services/queue", () => ({
   enqueueQueueJobWithRetries,
 }));
 
+vi.mock("@/services/llm-telemetry", () => ({
+  recordLlmCall,
+}));
+
 function stubVoyageEmbedding(embedding: number[] = new Array(1024).fill(0.01)) {
   const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
     const body =
@@ -56,6 +61,8 @@ function stubVoyageEmbedding(embedding: number[] = new Array(1024).fill(0.01)) {
     return {
       ok: true,
       json: async () => ({
+        model: "voyage-3",
+        usage: { total_tokens: input.length * 10 },
         data: input.map(() => ({
           embedding,
         })),
@@ -76,6 +83,8 @@ describe("SOP service", () => {
     listRecentSopDocuments.mockReset();
     findMostSimilarSopChunks.mockReset();
     enqueueQueueJobWithRetries.mockReset();
+    recordLlmCall.mockReset();
+    recordLlmCall.mockResolvedValue(undefined);
   });
 
   test("exposes the flat public API stubs for SOP library and retrieval operations", async () => {
@@ -398,6 +407,16 @@ describe("SOP service", () => {
         embedding: new Array(1024).fill(0.02),
       },
     ]);
+    expect(recordLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "voyage",
+        requestedModelAlias: "voyage-3",
+        responseModelSnapshot: "voyage-3",
+        usage: { totalTokens: 10 },
+        status: "ok",
+        context: { sopDocumentId: "doc-success" },
+      }),
+    );
     expect(markSopDocumentFailed).not.toHaveBeenCalled();
   });
 
