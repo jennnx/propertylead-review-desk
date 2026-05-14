@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Analytics01Icon,
   BookOpen01Icon,
   DashboardSquare01Icon,
   House01Icon,
@@ -29,6 +30,10 @@ const operatorDestinations = [
   { label: "Dashboard", href: "/", icon: DashboardSquare01Icon },
   { label: "Review Desk", href: "/review-desk", icon: InboxIcon },
   { label: "SOP Library", href: "/sops", icon: BookOpen01Icon },
+] as const;
+
+const developerDestinations = [
+  { label: "Usage", href: "/usage", icon: Analytics01Icon },
 ] as const;
 
 export function AppSidebar({ autoModeEnabled }: { autoModeEnabled: boolean }) {
@@ -66,6 +71,38 @@ export function AppSidebar({ autoModeEnabled }: { autoModeEnabled: boolean }) {
           <SidebarGroupContent>
             <SidebarMenu>
               {operatorDestinations.map((destination) => {
+                const active = isActive(pathname, destination.href);
+                return (
+                  <SidebarMenuItem key={destination.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      className="h-8 gap-2.5 rounded-md text-[13px] font-medium text-sidebar-foreground/80 data-active:bg-elevated data-active:text-sidebar-foreground data-active:ring-1 data-active:ring-sidebar-border data-active:shadow-[0_1px_0_0_oklch(0_0_0/0.03)]"
+                    >
+                      <Link href={destination.href}>
+                        <HugeiconsIcon
+                          icon={destination.icon}
+                          strokeWidth={active ? 2 : 1.75}
+                          className={
+                            active
+                              ? "text-sidebar-foreground"
+                              : "text-muted-foreground"
+                          }
+                        />
+                        <span>{destination.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-auto py-2">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {developerDestinations.map((destination) => {
                 const active = isActive(pathname, destination.href);
                 return (
                   <SidebarMenuItem key={destination.href}>
