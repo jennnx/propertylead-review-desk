@@ -14,7 +14,7 @@ type PromptfooTestRow = {
   assert: Array<{ type: "llm-rubric"; value: string }>;
 };
 
-export default async function generateTests(): Promise<PromptfooTestRow[]> {
+export async function generateTests(): Promise<PromptfooTestRow[]> {
   return dataset.map((evalCase) => ({
     description: evalCase.name,
     vars: {

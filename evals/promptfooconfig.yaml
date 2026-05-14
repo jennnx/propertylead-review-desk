@@ -11,7 +11,7 @@ providers:
 prompts:
   - "(eval provider reads the `case` test var; this prompt is unused)"
 
-tests: file://tests.ts:default
+tests: file://tests.ts:generateTests
 
 defaultTest:
   options:

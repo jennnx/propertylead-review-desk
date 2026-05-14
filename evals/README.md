@@ -36,6 +36,19 @@ After a run, open the HTML report:
 pnpm exec promptfoo view
 ```
 
+### First-time setup gotcha: `better-sqlite3` native bindings
+
+promptfoo uses `better-sqlite3` as its results cache. pnpm 10 silently skips
+its build script the first time you `pnpm install` (you'll see it in the
+"Ignored build scripts" warning), so `pnpm eval` fails at startup with
+`Could not locate the bindings file`. One-time fix from the repo root:
+
+```bash
+pnpm rebuild better-sqlite3
+# or, to allow it permanently for this project:
+pnpm approve-builds
+```
+
 ## Why imports reach into `services/hubspot-workflows/internal/`
 
 The provider in [`provider.ts`](provider.ts) imports
