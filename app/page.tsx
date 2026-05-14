@@ -17,7 +17,7 @@ import { OperatorSuggestionStateBadge } from "./review-desk/OperatorSuggestionSt
 
 const PENDING_STRIP_LIMIT = 5;
 const RECENT_ACTIVITY_LIMIT = 8;
-const ACTIVITY_GRAPH_DAYS = 14;
+const ACTIVITY_GRAPH_DAYS = 7;
 
 export default async function Home() {
   const [
