@@ -1,14 +1,16 @@
 import { hubSpot } from "@/services/hubspot";
 import type { HubSpotWritebackProposal } from "../../hubspot-workflows";
 
+import { handoffFinalizedHubSpotWriteback } from "./handoff";
 import { executeHubSpotWritebackPlan } from "./executor";
 import {
-  createPendingHubSpotWriteback,
   markHubSpotWritebackApplied,
+  setHubSpotWritebackAutoModeEnabled,
 } from "./mutations";
 import {
   findHubSpotWritebackForApproval,
   findHubSpotWritebackReviewDetail,
+  getHubSpotWritebackAutoModeEnabled,
   listPendingHubSpotWritebackReviewItems,
 } from "./queries";
 export type {
@@ -26,7 +28,7 @@ export type RecordProposedHubSpotWritebackInput = {
 export async function recordProposedHubSpotWriteback(
   input: RecordProposedHubSpotWritebackInput,
 ): Promise<void> {
-  await createPendingHubSpotWriteback({
+  await handoffFinalizedHubSpotWriteback({
     hubSpotWorkflowRunId: input.hubSpotWorkflowRunId,
     plan: input.plan,
   });
@@ -68,10 +70,17 @@ export async function approveHubSpotWriteback(
     };
   }
 
-  await markHubSpotWritebackApplied({
+  const markedApplied = await markHubSpotWritebackApplied({
     id,
     metadata: execution.metadata,
   });
+
+  if (!markedApplied) {
+    return {
+      ok: false,
+      message: "Only pending HubSpot Writebacks can be approved.",
+    };
+  }
 
   return { ok: true };
 }
@@ -82,4 +91,20 @@ export async function listPendingHubSpotWritebacks() {
 
 export async function getHubSpotWritebackReview(id: string) {
   return findHubSpotWritebackReviewDetail(id);
+}
+
+export type HubSpotWritebackAutoMode = {
+  enabled: boolean;
+};
+
+export async function getHubSpotWritebackAutoMode(): Promise<HubSpotWritebackAutoMode> {
+  return { enabled: await getHubSpotWritebackAutoModeEnabled() };
+}
+
+export async function setHubSpotWritebackAutoMode({
+  enabled,
+}: HubSpotWritebackAutoMode): Promise<HubSpotWritebackAutoMode> {
+  return {
+    enabled: await setHubSpotWritebackAutoModeEnabled(enabled),
+  };
 }

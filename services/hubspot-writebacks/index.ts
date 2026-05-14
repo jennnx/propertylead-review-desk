@@ -1,9 +1,12 @@
 export {
   approveHubSpotWriteback,
+  getHubSpotWritebackAutoMode,
   getHubSpotWritebackReview,
   listPendingHubSpotWritebacks,
   recordProposedHubSpotWriteback,
+  setHubSpotWritebackAutoMode,
   type ApproveHubSpotWritebackResult,
+  type HubSpotWritebackAutoMode,
   type HubSpotWritebackPlanFieldUpdateView,
   type HubSpotWritebackReviewDetail,
   type HubSpotWritebackReviewItem,
