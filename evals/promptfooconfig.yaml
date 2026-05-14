@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: PropertyLead HubSpot Writeback Plan eval
+
+# Custom TypeScript provider. The `prompt` field below is unused by this
+# provider — the case payload comes in via the `case` test var. We still
+# declare a placeholder prompt because promptfoo requires one.
+providers:
+  - id: file://provider.ts
+    label: propertylead-eval-provider
+
+prompts:
+  - "(eval provider reads the `case` test var; this prompt is unused)"
+
+tests: file://tests.ts:default
+
+defaultTest:
+  options:
+    # Judge runs on Claude Opus 4.7. Adaptive thinking keeps the judge
+    # reasoning steady on cases with subtle rubric criteria.
+    provider:
+      id: anthropic:messages:claude-opus-4-7
+      config:
+        max_tokens: 4096
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          "content": "You are evaluating PropertyLead Review Desk's HubSpot Writeback Plan for a real estate lead. Read the lead context, the plan, and the pass criteria. Score whether the plan satisfies the criteria for THIS specific lead. Respond with strict JSON: {\"pass\": boolean, \"score\": number between 0 and 1, \"reason\": short prose explanation}."
+        },
+        {
+          "role": "user",
+          "content": "## Lead context\n\n{{triggerSummary}}\n\n## Claude's HubSpot Writeback Plan\n\n{{output}}\n\n## Pass criteria for this lead\n\n{{criteria}}"
+        }
+      ]
