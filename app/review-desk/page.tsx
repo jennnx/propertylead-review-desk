@@ -12,15 +12,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  getHubSpotWritebackAutoMode,
   listDecidedHubSpotWritebacks,
   listPendingHubSpotWritebacks,
   type HubSpotWritebackReviewItem,
 } from "@/services/hubspot-writebacks";
 
+import { ReviewDeskAutoModeSwitch } from "./ReviewDeskAutoModeSwitch";
+
 export default async function ReviewDeskPage() {
-  const [pendingWritebacks, decidedWritebacks] = await Promise.all([
+  const [pendingWritebacks, decidedWritebacks, autoMode] = await Promise.all([
     listPendingHubSpotWritebacks(),
     listDecidedHubSpotWritebacks(),
+    getHubSpotWritebackAutoMode(),
   ]);
 
   return (
@@ -33,13 +37,14 @@ export default async function ReviewDeskPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex flex-col gap-1">
               <h1 className="text-2xl font-semibold tracking-normal">
-                Pending HubSpot Writebacks
+                Review Desk
               </h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
                 Review proposed HubSpot changes before they are applied.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <ReviewDeskAutoModeSwitch enabled={autoMode.enabled} />
               <Badge variant="secondary">
                 {pendingWritebacks.length} pending
               </Badge>

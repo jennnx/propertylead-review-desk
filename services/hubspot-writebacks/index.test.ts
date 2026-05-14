@@ -4,9 +4,12 @@ import { importWithRequiredEnv } from "@/tests/env";
 
 const create = vi.fn();
 const findHubSpotWritebackForApproval = vi.fn();
+const getHubSpotWritebackAutoModeEnabled = vi.fn();
 const markHubSpotWritebackApplied = vi.fn();
 const markHubSpotWritebackRejected = vi.fn();
 const updateHubSpotWritebackFeedbackNote = vi.fn();
+const markHubSpotWritebackAutoApplied = vi.fn();
+const setHubSpotWritebackAutoModeEnabled = vi.fn();
 const getContact = vi.fn();
 const updateContactProperties = vi.fn();
 const createContactNote = vi.fn();
@@ -21,6 +24,7 @@ vi.mock("@/services/database", () => ({
 
 vi.mock("./internal/queries", () => ({
   findHubSpotWritebackForApproval,
+  getHubSpotWritebackAutoModeEnabled,
 }));
 
 vi.mock("./internal/mutations", () => ({
@@ -28,6 +32,8 @@ vi.mock("./internal/mutations", () => ({
   markHubSpotWritebackApplied,
   markHubSpotWritebackRejected,
   updateHubSpotWritebackFeedbackNote,
+  markHubSpotWritebackAutoApplied,
+  setHubSpotWritebackAutoModeEnabled,
 }));
 
 vi.mock("@/services/hubspot", () => ({
@@ -48,15 +54,23 @@ describe("HubSpot writebacks service", () => {
     create.mockReset();
     create.mockResolvedValue({});
     findHubSpotWritebackForApproval.mockReset();
+    getHubSpotWritebackAutoModeEnabled.mockReset();
+    getHubSpotWritebackAutoModeEnabled.mockResolvedValue(false);
     markHubSpotWritebackApplied.mockReset();
+    markHubSpotWritebackApplied.mockResolvedValue(true);
     markHubSpotWritebackRejected.mockReset();
+    markHubSpotWritebackRejected.mockResolvedValue(true);
     updateHubSpotWritebackFeedbackNote.mockReset();
+    markHubSpotWritebackAutoApplied.mockReset();
+    markHubSpotWritebackAutoApplied.mockResolvedValue(true);
+    setHubSpotWritebackAutoModeEnabled.mockReset();
+    setHubSpotWritebackAutoModeEnabled.mockResolvedValue(true);
     getContact.mockReset();
     updateContactProperties.mockReset();
     createContactNote.mockReset();
   });
 
-  test("persists a pending HubSpot Writeback carrying the proposed plan", async () => {
+  test("records a proposed HubSpot Writeback as pending when Auto-Mode is off", async () => {
     const { recordProposedHubSpotWriteback } = await importWithRequiredEnv(
       () => import("./index"),
     );
@@ -79,6 +93,10 @@ describe("HubSpot writebacks service", () => {
         note: "Hot lead from Zillow.",
       },
     });
+    expect(getHubSpotWritebackAutoModeEnabled).toHaveBeenCalledTimes(1);
+    expect(updateContactProperties).not.toHaveBeenCalled();
+    expect(createContactNote).not.toHaveBeenCalled();
+    expect(markHubSpotWritebackAutoApplied).not.toHaveBeenCalled();
   });
 
   test("approves a pending HubSpot Writeback by applying the plan and marking it applied", async () => {
@@ -123,7 +141,29 @@ describe("HubSpot writebacks service", () => {
         ],
         note: null,
       },
+      reviewDeskFeedbackNote: undefined,
     });
+  });
+
+  test("reads and writes the global Auto-Mode setting", async () => {
+    getHubSpotWritebackAutoModeEnabled.mockResolvedValue(false);
+
+    const {
+      getHubSpotWritebackAutoMode,
+      setHubSpotWritebackAutoMode,
+    } = await importWithRequiredEnv(() => import("./index"));
+
+    await expect(getHubSpotWritebackAutoMode()).resolves.toEqual({
+      enabled: false,
+    });
+    await expect(
+      setHubSpotWritebackAutoMode({ enabled: true }),
+    ).resolves.toEqual({ enabled: true });
+
+    expect(setHubSpotWritebackAutoModeEnabled).toHaveBeenCalledWith(true);
+    expect(create).not.toHaveBeenCalled();
+    expect(updateContactProperties).not.toHaveBeenCalled();
+    expect(markHubSpotWritebackAutoApplied).not.toHaveBeenCalled();
   });
 
   test("leaves a pending HubSpot Writeback unchanged when HubSpot returns a transient error", async () => {
@@ -244,6 +284,38 @@ describe("HubSpot writebacks service", () => {
     expect(updateHubSpotWritebackFeedbackNote).toHaveBeenNthCalledWith(2, {
       id: "writeback-1",
       reviewDeskFeedbackNote: null,
+    });
+  });
+
+  test("reports approval as stale when another path already decided the HubSpot Writeback", async () => {
+    findHubSpotWritebackForApproval.mockResolvedValue({
+      id: "writeback-1",
+      state: "PENDING",
+      contactId: "contact-123",
+      plan: {
+        kind: "writeback",
+        fieldUpdates: [{ name: "pd_urgency", value: "high" }],
+        note: null,
+      },
+    });
+    getContact.mockResolvedValue({
+      id: "contact-123",
+      properties: {
+        pd_urgency: "normal",
+      },
+    });
+    updateContactProperties.mockResolvedValue(undefined);
+    markHubSpotWritebackApplied.mockResolvedValue(false);
+
+    const { approveHubSpotWriteback } = await importWithRequiredEnv(() =>
+      import("./index"),
+    );
+
+    const result = await approveHubSpotWriteback("writeback-1");
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Only pending HubSpot Writebacks can be approved.",
     });
   });
 });

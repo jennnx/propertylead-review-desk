@@ -4,6 +4,8 @@ import { getPrismaClient } from "../../database";
 import type { HubSpotWritebackProposal } from "../../hubspot-workflows";
 import type { HubSpotWritebackExecutionMetadata } from "./executor";
 
+const HUBSPOT_WRITEBACK_SETTINGS_ID = "global";
+
 export type CreatePendingHubSpotWritebackInput = {
   hubSpotWorkflowRunId: string;
   plan: HubSpotWritebackProposal;
@@ -11,12 +13,13 @@ export type CreatePendingHubSpotWritebackInput = {
 
 export async function createPendingHubSpotWriteback(
   input: CreatePendingHubSpotWritebackInput,
-): Promise<void> {
-  await getPrismaClient().hubSpotWriteback.create({
+): Promise<{ id: string }> {
+  return getPrismaClient().hubSpotWriteback.create({
     data: {
       hubSpotWorkflowRunId: input.hubSpotWorkflowRunId,
       plan: input.plan as unknown as Prisma.InputJsonValue,
     },
+    select: { id: true },
   });
 }
 
@@ -28,9 +31,9 @@ export async function markHubSpotWritebackApplied({
   id: string;
   metadata: HubSpotWritebackExecutionMetadata;
   reviewDeskFeedbackNote?: string | null;
-}): Promise<void> {
-  await getPrismaClient().hubSpotWriteback.update({
-    where: { id },
+}): Promise<boolean> {
+  const result = await getPrismaClient().hubSpotWriteback.updateMany({
+    where: { id, state: "PENDING" },
     data: {
       state: "APPLIED",
       appliedAt: new Date(),
@@ -38,6 +41,8 @@ export async function markHubSpotWritebackApplied({
       ...(reviewDeskFeedbackNote !== undefined ? { reviewDeskFeedbackNote } : {}),
     },
   });
+
+  return result.count === 1;
 }
 
 export async function markHubSpotWritebackRejected({
@@ -46,14 +51,16 @@ export async function markHubSpotWritebackRejected({
 }: {
   id: string;
   reviewDeskFeedbackNote?: string | null;
-}): Promise<void> {
-  await getPrismaClient().hubSpotWriteback.update({
-    where: { id },
+}): Promise<boolean> {
+  const result = await getPrismaClient().hubSpotWriteback.updateMany({
+    where: { id, state: "PENDING" },
     data: {
       state: "REJECTED",
       ...(reviewDeskFeedbackNote !== undefined ? { reviewDeskFeedbackNote } : {}),
     },
   });
+
+  return result.count === 1;
 }
 
 export async function updateHubSpotWritebackFeedbackNote({
@@ -69,4 +76,41 @@ export async function updateHubSpotWritebackFeedbackNote({
       reviewDeskFeedbackNote,
     },
   });
+}
+
+export async function markHubSpotWritebackAutoApplied({
+  id,
+  metadata,
+}: {
+  id: string;
+  metadata: HubSpotWritebackExecutionMetadata;
+}): Promise<boolean> {
+  const result = await getPrismaClient().hubSpotWriteback.updateMany({
+    where: { id, state: "PENDING" },
+    data: {
+      state: "AUTO_APPLIED",
+      appliedAt: new Date(),
+      applicationMetadata: metadata as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  return result.count === 1;
+}
+
+export async function setHubSpotWritebackAutoModeEnabled(
+  enabled: boolean,
+): Promise<boolean> {
+  const row = await getPrismaClient().hubSpotWritebackSettings.upsert({
+    where: { id: HUBSPOT_WRITEBACK_SETTINGS_ID },
+    create: {
+      id: HUBSPOT_WRITEBACK_SETTINGS_ID,
+      autoModeEnabled: enabled,
+    },
+    update: {
+      autoModeEnabled: enabled,
+    },
+    select: { autoModeEnabled: true },
+  });
+
+  return row.autoModeEnabled;
 }

@@ -1,12 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import {
   approveHubSpotWriteback,
   rejectHubSpotWriteback,
+  setHubSpotWritebackAutoMode,
   updateReviewDeskFeedbackNote,
 } from "@/services/hubspot-writebacks";
+
+const autoModeEnabledSchema = z.boolean();
 
 export type ReviewDeskDecisionActionState = {
   status: "idle" | "error";
@@ -97,4 +101,33 @@ function readFeedbackNote(
   formData: FormData,
 ): string | null {
   return intent === "clear" ? null : readOptionalFeedbackNote(formData);
+}
+
+export type ReviewDeskAutoModeActionResult =
+  | { ok: true; enabled: boolean }
+  | { ok: false; message: string };
+
+export async function setHubSpotWritebackAutoModeAction(
+  enabled: unknown,
+): Promise<ReviewDeskAutoModeActionResult> {
+  const parsed = autoModeEnabledSchema.safeParse(enabled);
+  if (!parsed.success) {
+    return { ok: false, message: "Invalid Auto-Mode value." };
+  }
+
+  try {
+    const setting = await setHubSpotWritebackAutoMode({
+      enabled: parsed.data,
+    });
+    revalidatePath("/review-desk");
+    return { ok: true, enabled: setting.enabled };
+  } catch (error) {
+    console.error("Failed to update HubSpot Writeback Auto-Mode.", {
+      error,
+    });
+    return {
+      ok: false,
+      message: "Auto-Mode could not be updated. Please try again.",
+    };
+  }
 }
