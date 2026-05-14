@@ -169,8 +169,7 @@ export type OperatorDashboardCounts = {
 };
 
 export async function getOperatorDashboardCounts(): Promise<OperatorDashboardCounts> {
-  const now = new Date();
-  const todayStart = new Date(now);
+  const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const thirtyDaysAgo = new Date(todayStart);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
