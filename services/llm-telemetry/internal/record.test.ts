@@ -116,6 +116,47 @@ describe("recordLlmCall", () => {
     );
   });
 
+  test("records a successful Voyage call with total tokens, cost, and SOP Document context", async () => {
+    const { recordLlmCall } = await importWithRequiredEnv(() =>
+      import("./record"),
+    );
+
+    await recordLlmCall({
+      provider: "voyage",
+      requestedModelAlias: "voyage-3",
+      responseModelSnapshot: "voyage-3",
+      usage: {
+        totalTokens: 250_000,
+      },
+      latencyMs: 318,
+      source: "production",
+      status: "ok",
+      context: {
+        sopDocumentId: "sop-doc-1",
+      },
+    });
+
+    expect(insertLlmCall).toHaveBeenCalledTimes(1);
+    const row = insertLlmCall.mock.calls[0][0];
+    expect(row).toMatchObject({
+      provider: "VOYAGE",
+      modelAlias: "voyage-3",
+      modelSnapshot: "voyage-3",
+      source: "PRODUCTION",
+      inputTokens: null,
+      outputTokens: null,
+      cacheCreationTokens: null,
+      cacheReadTokens: null,
+      totalTokens: 250_000,
+      latencyMs: 318,
+      status: "OK",
+      errorMessage: null,
+      hubSpotWorkflowRunId: null,
+      sopDocumentId: "sop-doc-1",
+    });
+    expect(row.costUsd).toBeCloseTo(0.015, 10);
+  });
+
   test("tags the row with the eval source when called from an eval-flagged context", async () => {
     const { recordLlmCall } = await importWithRequiredEnv(() =>
       import("./record"),
