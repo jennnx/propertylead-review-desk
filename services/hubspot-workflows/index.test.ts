@@ -19,6 +19,7 @@ const listConversationThreads = vi.fn();
 const getConversationThreadMessages = vi.fn();
 
 const recordProposedHubSpotWriteback = vi.fn();
+const listCompletedHubSpotWorkflowRunDates = vi.fn();
 
 vi.mock("@/services/database", () => ({
   getPrismaClient: () => ({
@@ -27,6 +28,10 @@ vi.mock("@/services/database", () => ({
       update,
     },
   }),
+}));
+
+vi.mock("./internal/queries", () => ({
+  listCompletedHubSpotWorkflowRunDates,
 }));
 
 vi.mock("@/services/hubspot-writebacks", () => ({
@@ -116,6 +121,8 @@ describe("HubSpot workflows service", () => {
     getConversationThreadMessages.mockReset();
     recordProposedHubSpotWriteback.mockReset();
     recordProposedHubSpotWriteback.mockResolvedValue(undefined);
+    listCompletedHubSpotWorkflowRunDates.mockReset();
+    listCompletedHubSpotWorkflowRunDates.mockResolvedValue([]);
     messagesCreate.mockResolvedValue(
       claudeWritebackPlanResponse({
         kind: "no_writeback",
@@ -1243,4 +1250,127 @@ describe("HubSpot workflows service", () => {
 
     expect(recordProposedHubSpotWriteback).not.toHaveBeenCalled();
   });
+
+  test("returns one gap-filled entry per day covering the last N days inclusive of today", async () => {
+    const fixedNow = new Date("2026-05-14T10:30:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+
+    try {
+      listCompletedHubSpotWorkflowRunDates.mockResolvedValue([]);
+
+      const { listWorkflowRunsPerDay } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      const result = await listWorkflowRunsPerDay(14);
+
+      expect(result).toHaveLength(14);
+      expect(result.at(-1)?.date).toBe(formatLocalDateKey(fixedNow));
+      expect(result.every((entry) => entry.count === 0)).toBe(true);
+      const expectedFirst = new Date(fixedNow);
+      expectedFirst.setHours(0, 0, 0, 0);
+      expectedFirst.setDate(expectedFirst.getDate() - 13);
+      expect(result[0].date).toBe(formatLocalDateKey(expectedFirst));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("bounds the query window by the daysBack argument starting at the local midnight of (daysBack - 1) days ago", async () => {
+    const fixedNow = new Date("2026-05-14T10:30:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+
+    try {
+      listCompletedHubSpotWorkflowRunDates.mockResolvedValue([]);
+
+      const { listWorkflowRunsPerDay } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      await listWorkflowRunsPerDay(7);
+
+      expect(listCompletedHubSpotWorkflowRunDates).toHaveBeenCalledTimes(1);
+      const { from, to } =
+        listCompletedHubSpotWorkflowRunDates.mock.calls[0][0];
+
+      const expectedFrom = new Date(fixedNow);
+      expectedFrom.setHours(0, 0, 0, 0);
+      expectedFrom.setDate(expectedFrom.getDate() - 6);
+      const expectedTo = new Date(fixedNow);
+      expectedTo.setHours(0, 0, 0, 0);
+      expectedTo.setDate(expectedTo.getDate() + 1);
+
+      expect(from.getTime()).toBe(expectedFrom.getTime());
+      expect(to.getTime()).toBe(expectedTo.getTime());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("counts workflow runs by their completion day and leaves untouched days at zero", async () => {
+    const fixedNow = new Date("2026-05-14T10:30:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+
+    try {
+      const today = new Date(fixedNow);
+      today.setHours(8, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      listCompletedHubSpotWorkflowRunDates.mockResolvedValue([
+        today,
+        today,
+        today,
+        yesterday,
+      ]);
+
+      const { listWorkflowRunsPerDay } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      const result = await listWorkflowRunsPerDay(14);
+      const byDate = new Map(result.map((entry) => [entry.date, entry.count]));
+
+      expect(byDate.get(formatLocalDateKey(today))).toBe(3);
+      expect(byDate.get(formatLocalDateKey(yesterday))).toBe(1);
+      const twoDaysAgo = new Date(today);
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      expect(byDate.get(formatLocalDateKey(twoDaysAgo))).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("includes today in the window so a run completed at 23:59 local time still appears in the final entry", async () => {
+    const fixedNow = new Date("2026-05-14T23:59:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+
+    try {
+      const todayEvening = new Date(fixedNow);
+      listCompletedHubSpotWorkflowRunDates.mockResolvedValue([todayEvening]);
+
+      const { listWorkflowRunsPerDay } = await importWithRequiredEnv(() =>
+        import("./index"),
+      );
+
+      const result = await listWorkflowRunsPerDay(14);
+      const last = result.at(-1);
+
+      expect(last?.date).toBe(formatLocalDateKey(todayEvening));
+      expect(last?.count).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+
+function formatLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}

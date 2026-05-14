@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { listWorkflowRunsPerDay } from "@/services/hubspot-workflows";
 import {
   getHubSpotWritebackAutoMode,
   getOperatorDashboardCounts,
@@ -19,19 +20,27 @@ import {
   type OperatorDashboardCounts,
 } from "@/services/hubspot-writebacks";
 
+import { DashboardActivityChart } from "./DashboardActivityChart";
 import { OperatorSuggestionStateBadge } from "./review-desk/OperatorSuggestionStateBadge";
 
 const PENDING_STRIP_LIMIT = 5;
 const RECENT_ACTIVITY_LIMIT = 10;
+const ACTIVITY_GRAPH_DAYS = 14;
 
 export default async function Home() {
-  const [counts, autoMode, pendingWritebacks, decidedWritebacks] =
-    await Promise.all([
-      getOperatorDashboardCounts(),
-      getHubSpotWritebackAutoMode(),
-      listPendingHubSpotWritebacks(),
-      listDecidedHubSpotWritebacks(),
-    ]);
+  const [
+    counts,
+    autoMode,
+    pendingWritebacks,
+    decidedWritebacks,
+    activityCounts,
+  ] = await Promise.all([
+    getOperatorDashboardCounts(),
+    getHubSpotWritebackAutoMode(),
+    listPendingHubSpotWritebacks(),
+    listDecidedHubSpotWritebacks(),
+    listWorkflowRunsPerDay(ACTIVITY_GRAPH_DAYS),
+  ]);
 
   const headline = formatStatusHeadline(counts);
   const pendingPreview = pendingWritebacks.slice(0, PENDING_STRIP_LIMIT);
@@ -48,6 +57,8 @@ export default async function Home() {
           <h1 className="text-2xl font-semibold tracking-normal">Dashboard</h1>
           <p className="max-w-3xl text-base text-foreground">{headline}</p>
         </header>
+
+        <DashboardActivityChart data={activityCounts} />
 
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold tracking-normal">
