@@ -2,6 +2,7 @@ export {
   approveHubSpotWriteback,
   getHubSpotWritebackAutoMode,
   getHubSpotWritebackReview,
+  getOperatorDashboardCounts,
   listDecidedHubSpotWritebacks,
   listPendingHubSpotWritebacks,
   recordProposedHubSpotWriteback,
@@ -14,6 +15,7 @@ export {
   type HubSpotWritebackReviewDetail,
   type HubSpotWritebackReviewItem,
   type HubSpotWritebackReviewState,
+  type OperatorDashboardCounts,
   type RecordProposedHubSpotWritebackInput,
 } from "./internal/operations";
 
