@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { claude, DEFAULT_CLAUDE_MODEL } from "@/services/claude";
+import {
+  claude,
+  DEFAULT_CLAUDE_MODEL,
+  type ClaudeModel,
+} from "@/services/claude";
 
 import {
   buildContactCreatedWritebackPlanPrompt,
@@ -31,22 +35,34 @@ export type HubSpotWritebackPlanRequestResult = {
   acceptedPlan: HubSpotWritebackPlan | null;
 };
 
-export async function requestContactCreatedWritebackPlan(input: {
+export type HubSpotWritebackPlanRequestOptions = {
+  claudeModel?: ClaudeModel;
+};
+
+type ContactCreatedWritebackPlanRequest = HubSpotWritebackPlanRequestOptions & {
   enrichmentInputContext: HubSpotWorkflowRunContactCreatedEnrichmentInputContext;
-}): Promise<HubSpotWritebackPlanRequestResult> {
+};
+
+type InboundMessageWritebackPlanRequest = HubSpotWritebackPlanRequestOptions & {
+  enrichmentInputContext: HubSpotWorkflowRunInboundMessageEnrichmentInputContext;
+};
+
+export async function requestContactCreatedWritebackPlan(
+  input: ContactCreatedWritebackPlanRequest,
+): Promise<HubSpotWritebackPlanRequestResult> {
   const material = buildContactCreatedWritebackPlanPrompt({
     enrichmentInputContext: input.enrichmentInputContext,
-    model: DEFAULT_CLAUDE_MODEL,
+    model: input.claudeModel ?? DEFAULT_CLAUDE_MODEL,
   });
   return requestWritebackPlan(material);
 }
 
-export async function requestInboundMessageWritebackPlan(input: {
-  enrichmentInputContext: HubSpotWorkflowRunInboundMessageEnrichmentInputContext;
-}): Promise<HubSpotWritebackPlanRequestResult> {
+export async function requestInboundMessageWritebackPlan(
+  input: InboundMessageWritebackPlanRequest,
+): Promise<HubSpotWritebackPlanRequestResult> {
   const material = buildInboundMessageWritebackPlanPrompt({
     enrichmentInputContext: input.enrichmentInputContext,
-    model: DEFAULT_CLAUDE_MODEL,
+    model: input.claudeModel ?? DEFAULT_CLAUDE_MODEL,
   });
   return requestWritebackPlan(material);
 }

@@ -27,12 +27,15 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: MockAnthropic };
 });
 
-function toolUseResponse(input: unknown) {
+function toolUseResponse(
+  input: unknown,
+  model = "claude-sonnet-4-6-20251022",
+) {
   return {
     id: "msg_test",
     type: "message",
     role: "assistant",
-    model: "claude-sonnet-4-6-20251022",
+    model,
     content: [
       {
         type: "tool_use",
@@ -106,6 +109,64 @@ describe("requestWritebackPlan telemetry contract", () => {
         source: "production",
       });
     }
+  });
+
+  test("uses an explicit Claude model override for inbound-message writeback plan requests", async () => {
+    innerCreate.mockResolvedValueOnce(
+      toolUseResponse(
+        {
+          kind: "writeback",
+          fieldUpdates: [{ name: "pd_urgency", value: "high" }],
+        },
+        "claude-opus-4-7",
+      ),
+    );
+
+    const { requestInboundMessageWritebackPlan } =
+      await importWithRequiredEnv(() => import("./request-writeback-plan"));
+
+    const result = await requestInboundMessageWritebackPlan({
+      claudeModel: "claude-opus-4-7",
+      enrichmentInputContext: {
+        source: "hubspot_inbound_message",
+        hubSpotPortalId: null,
+        occurredAt: null,
+        triggeringMessageId: "msg-1",
+        contact: {
+          id: "contact-123",
+          properties: { email: "ana.lead@gmail.com" },
+        },
+        currentConversationSession: {
+          messageLimit: 30,
+          messages: [
+            {
+              id: "msg-1",
+              threadId: "thread-1",
+              actorId: null,
+              direction: "INCOMING",
+              text: "Can I tour this weekend?",
+              richText: "<p>Can I tour this weekend?</p>",
+              createdAt: "2026-05-12T15:00:00.000Z",
+              truncationStatus: "NOT_TRUNCATED",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(innerCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "claude-opus-4-7" }),
+      undefined,
+    );
+    expect(result.input.model).toBe("claude-opus-4-7");
+    expect(recordLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "anthropic",
+        requestedModelAlias: "claude-opus-4-7",
+        responseModelSnapshot: "claude-opus-4-7",
+        status: "ok",
+      }),
+    );
   });
 
   test("emits a recordLlmCall row even when the SDK throws a transport error", async () => {

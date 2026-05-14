@@ -1,9 +1,10 @@
 # Evals
 
 Developer-facing evaluation of PropertyLead Review Desk's HubSpot Writeback
-Plan output, scored by an LLM judge (Claude Opus 4.7) against per-case
-rubrics. Runs via [promptfoo](https://www.promptfoo.dev). Results are
-local-only (CLI + local HTML report); nothing operator-facing changes.
+Plan output across Claude model variants, scored by an LLM judge (Claude Opus
+4.7) against per-case rubrics. Runs via
+[promptfoo](https://www.promptfoo.dev). Results are local-only (CLI + local
+HTML report); nothing operator-facing changes.
 
 This is the **tracer-bullet** slice of the broader eval workflow described
 in PRD [#55](https://github.com/jennnx/propertylead-review-desk/issues/55).
@@ -18,10 +19,11 @@ pnpm eval
 ```
 
 This calls the real `requestInboundMessageWritebackPlan` for every case in
-`dataset` (defined in [`cases.ts`](cases.ts)), so each run exercises the
-production prompt builder, tool schema, Zod validator, and retry loop.
-That means each run **hits the Anthropic API and costs real money** — keep
-the dataset small until you actually want to spend.
+`dataset` (defined in [`cases.ts`](cases.ts)) once per configured eval
+provider, so each run exercises the production prompt builder, tool schema,
+Zod validator, and retry loop. That means each run **hits the Anthropic API
+and costs real money** — keep the dataset/provider matrix small until you
+actually want to spend.
 
 Credentials come from the existing root `.env` (`ANTHROPIC_API_KEY`); no
 new env vars are introduced. If `ANTHROPIC_API_KEY` is set to an empty
@@ -29,6 +31,11 @@ string in your shell (the same gotcha hit during seed-data work in
 [commit 68f5c67](https://github.com/jennnx/propertylead-review-desk/commit/68f5c67)),
 either `unset ANTHROPIC_API_KEY` or use a `.env` loader that overrides
 explicitly — promptfoo loads `.env` via dotenv with the same precedence.
+
+The package scripts set `LLM_TELEMETRY_SOURCE=eval` inline when invoking
+promptfoo. That tags eval-driven Claude traffic for the Usage page without
+adding anything to `.env`; when the variable is unset in ordinary app and
+worker processes, telemetry defaults to production.
 
 After a run, open the HTML report:
 
@@ -78,7 +85,8 @@ The `evals/**` block in
   pre-computing each case's `triggerSummary` so the rubric template can
   interpolate `{{triggerSummary}}` independently of `{{output}}`.
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) — wires the custom
-  provider, the test rows, and the Opus-4.7 judge.
+  provider once per Claude model variant (`sonnet`, `opus`, `haiku`), the
+  test rows, and the Opus-4.7 judge.
 
 Unit tests (`*.test.ts` in this directory) run as part of `pnpm test`.
 They do **not** call Anthropic — `requestInboundMessageWritebackPlan` is
